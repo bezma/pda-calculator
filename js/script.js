@@ -1,0 +1,1149 @@
+/* Shared helpers */
+let draggingRow = null;
+let outlaysTable = null;
+let toggleSailing = null;
+let densityComfortable = null;
+let densityDense = null;
+let printRestoreDensity = null;
+let outlaysCurrency = null;
+const STORAGE_KEYS = {
+  gt: 'pda_gt',
+  towageTotal: 'pda_towage_total',
+  towageArrivalCount: 'pda_towage_arrival_count',
+  towageDepartureCount: 'pda_towage_departure_count',
+  tugsState: 'pda_tugs_state'
+};
+
+function safeStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch (error) {
+    // ignore storage errors
+  }
+}
+
+function safeStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    // ignore storage errors
+  }
+}
+
+let isRestoringTugs = false;
+
+function getTugsState() {
+  const raw = safeStorageGet(STORAGE_KEYS.tugsState);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveTugsState() {
+  if (isRestoringTugs) return;
+  const tugCards = document.getElementById('tugCards');
+  if (!tugCards) return;
+
+  const tugs = Array.from(tugCards.querySelectorAll('.card')).map((card) => {
+    const id = card.id.split('_')[1];
+    return {
+      op: document.getElementById(`op_${id}`)?.value || 'arrival',
+      voyage: document.getElementById(`voyage_${id}`)?.value || '1',
+      assist: document.getElementById(`assist_${id}`)?.value || '0.5',
+      imo: document.getElementById(`imo_${id}`)?.checked || false,
+      lines: document.getElementById(`lines_${id}`)?.checked || false,
+      kw: document.getElementById(`kw_${id}`)?.checked || false,
+      voy_ot: document.getElementById(`voy_ot_${id}`)?.value || '0',
+      assist_ot: document.getElementById(`assist_ot_${id}`)?.value || '0'
+    };
+  });
+
+  const state = {
+    vesselName: document.getElementById('vesselName')?.value || '',
+    gt: document.getElementById('gt')?.value || '',
+    tugs
+  };
+
+  safeStorageSet(STORAGE_KEYS.tugsState, JSON.stringify(state));
+}
+
+function restoreTugsState() {
+  const tugCards = document.getElementById('tugCards');
+  if (!tugCards) return false;
+
+  const state = getTugsState();
+  if (!state || !Array.isArray(state.tugs) || state.tugs.length === 0) return false;
+
+  isRestoringTugs = true;
+  tugCards.innerHTML = '';
+  tugCount = 0;
+
+  state.tugs.forEach((tug) => {
+    addTug();
+    const id = tugCount;
+    const op = document.getElementById(`op_${id}`);
+    const voyage = document.getElementById(`voyage_${id}`);
+    const assist = document.getElementById(`assist_${id}`);
+    const imo = document.getElementById(`imo_${id}`);
+    const lines = document.getElementById(`lines_${id}`);
+    const kw = document.getElementById(`kw_${id}`);
+    const voyOt = document.getElementById(`voy_ot_${id}`);
+    const assistOt = document.getElementById(`assist_ot_${id}`);
+
+    if (op) op.value = tug.op || 'arrival';
+    if (voyage) voyage.value = tug.voyage || '1';
+    if (assist) assist.value = tug.assist || '0.5';
+    if (imo) imo.checked = Boolean(tug.imo);
+    if (lines) lines.checked = Boolean(tug.lines);
+    if (kw) kw.checked = Boolean(tug.kw);
+    if (voyOt) voyOt.value = tug.voy_ot || '0';
+    if (assistOt) assistOt.value = tug.assist_ot || '0';
+  });
+
+  const vesselName = document.getElementById('vesselName');
+  if (vesselName) vesselName.value = state.vesselName || '';
+
+  const gtInput = document.getElementById('gt');
+  if (gtInput) {
+    if (state.gt) gtInput.value = state.gt;
+    const gtValue = Number(gtInput.value);
+    const tariff = getTariffFromGT(gtValue);
+    const tariffInput = document.getElementById('tariff');
+    if (tariffInput) tariffInput.value = tariff || '';
+  }
+
+  isRestoringTugs = false;
+  updateTugTitles();
+  syncImoMaster();
+  syncLinesMaster();
+  calculate();
+  saveTugsState();
+  return true;
+}
+
+function addOutlayRow(values = {}) {
+  const tbody = document.getElementById('outlaysBody');
+  const template = document.getElementById('outlayRowTemplate');
+  if (!tbody || !template) return;
+
+  const row = template.content.firstElementChild.cloneNode(true);
+  const desc = row.querySelector('[data-field="desc"]');
+  const pda = row.querySelector('[data-field="pda"]');
+  const sailing = row.querySelector('[data-field="sailing"]');
+
+  if (desc) desc.value = values.desc || '';
+  if (pda) pda.value = values.pda || '';
+  if (sailing) sailing.value = values.sailing || '';
+
+  const bankRow = tbody.querySelector('tr[data-row="bank-charges"]');
+  if (bankRow) {
+    tbody.insertBefore(row, bankRow);
+  } else {
+    tbody.appendChild(row);
+  }
+  if (desc && desc.tagName === 'TEXTAREA') autoResizeTextarea(desc);
+  wrapMoneyFields();
+  recalcOutlayTotals();
+}
+
+function clearOutlayRow(row) {
+  row.querySelectorAll('input, textarea').forEach((field) => {
+    field.value = '';
+    if (field.tagName === 'TEXTAREA') autoResizeTextarea(field);
+  });
+  recalcOutlayTotals();
+}
+
+function decorateOutlayRows() {
+  const tbody = document.getElementById('outlaysBody');
+  if (!tbody) return;
+
+  tbody.querySelectorAll('tr').forEach((row) => {
+    const descCell = row.querySelector('td.desc');
+    if (!descCell) return;
+    if (row.dataset.row === 'bank-charges') return;
+    if (descCell.querySelector('.row-item')) return;
+
+    const input = descCell.querySelector('input, textarea');
+    if (!input) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'row-item';
+
+    descCell.removeChild(input);
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'row-handle';
+    handle.setAttribute('draggable', 'true');
+    handle.setAttribute('aria-label', 'Move row');
+    const handleImg = document.createElement('img');
+    handleImg.src = 'assets/icons/move_grabber_48×48.png';
+    handleImg.alt = '';
+    handle.appendChild(handleImg);
+    wrapper.appendChild(handle);
+
+    wrapper.appendChild(input);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'row-remove';
+    removeBtn.setAttribute('aria-label', 'Remove row');
+    const removeImg = document.createElement('img');
+    removeImg.src = 'assets/icons/remove_48×48.png';
+    removeImg.alt = '';
+    removeBtn.appendChild(removeImg);
+    wrapper.appendChild(removeBtn);
+
+    descCell.appendChild(wrapper);
+  });
+}
+
+function autoResizeTextarea(textarea) {
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function stripTowageCounts(text) {
+  return String(text || '').replace(/\s*\(Arrival tugs:.*?Departure tugs:.*?\)\s*$/i, '').trim();
+}
+
+function updateTowageFromStorage() {
+  const towageRow = document.querySelector('tr[data-row="towage"]');
+  if (!towageRow) return;
+
+  const descInput = towageRow.querySelector('textarea.cell-input.text');
+  if (descInput && !descInput.dataset.baseText) {
+    descInput.dataset.baseText = 'TOWAGE';
+  }
+
+  const totalRaw = safeStorageGet(STORAGE_KEYS.towageTotal);
+  const arrivalCountRaw = safeStorageGet(STORAGE_KEYS.towageArrivalCount);
+  const departureCountRaw = safeStorageGet(STORAGE_KEYS.towageDepartureCount);
+
+  const arrivalCount = Number(arrivalCountRaw);
+  const departureCount = Number(departureCountRaw);
+  if (descInput) {
+    descInput.dataset.baseText = 'TOWAGE';
+    const safeArrival = Number.isFinite(arrivalCount) ? arrivalCount : 0;
+    const safeDeparture = Number.isFinite(departureCount) ? departureCount : 0;
+    descInput.value = `TOWAGE (Arrival tugs: ${safeArrival}, Departure tugs: ${safeDeparture})`;
+    autoResizeTextarea(descInput);
+  }
+
+  const totalValue = Number(totalRaw);
+  if (Number.isFinite(totalValue)) {
+    const formatted = formatMoneyValue(totalValue);
+    const pdaInput = towageRow.querySelector('td:nth-child(2) input');
+    const sailingInput = towageRow.querySelector('td:nth-child(3) input');
+    if (pdaInput) pdaInput.value = formatted;
+    if (sailingInput) sailingInput.value = formatted;
+    recalcOutlayTotals();
+  }
+}
+
+function updateIndexGtFromStorage() {
+  const gtInputIndex = document.getElementById('grossTonnage');
+  if (!gtInputIndex) return;
+  const storedGt = safeStorageGet(STORAGE_KEYS.gt);
+  if (!storedGt) return;
+  if (gtInputIndex.value !== storedGt) {
+    gtInputIndex.value = storedGt;
+  }
+}
+
+function refreshOutlayLayout() {
+  document.querySelectorAll('#outlaysBody textarea.cell-input.text').forEach(autoResizeTextarea);
+}
+
+function parseMoneyValue(raw) {
+  if (!raw) return 0;
+  const cleaned = String(raw).trim().replace(/[^0-9,.-]/g, '');
+  if (!cleaned) return 0;
+
+  const hasComma = cleaned.includes(',');
+  const hasDot = cleaned.includes('.');
+
+  let normalized = cleaned;
+  if (hasComma && hasDot) {
+    normalized = cleaned.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma && !hasDot) {
+    normalized = cleaned.replace(',', '.');
+  }
+
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function parsePercentValue(raw) {
+  return parseMoneyValue(raw);
+}
+
+function formatMoneyValue(value) {
+  const fixed = Number.isFinite(value) ? value.toFixed(2) : '0.00';
+  const [whole, decimal] = fixed.split('.');
+  const withThousands = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${withThousands},${decimal}`;
+}
+
+function getCurrencySymbol(code) {
+  const map = {
+    EUR: '€',
+    USD: '$',
+    GBP: '£',
+    HRK: 'kn'
+  };
+  return map[code] || code;
+}
+
+function updateCurrencySymbol(code) {
+  const symbol = getCurrencySymbol(code);
+  document.querySelectorAll('[data-currency-symbol]').forEach((el) => {
+    el.textContent = symbol;
+  });
+}
+
+function wrapMoneyFields() {
+  document.querySelectorAll('input.cell-input.money').forEach((input) => {
+    if (input.closest('.money-field')) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'money-field';
+    const symbol = document.createElement('span');
+    symbol.className = 'currency-symbol';
+    symbol.setAttribute('data-currency-symbol', '');
+    symbol.textContent = getCurrencySymbol(outlaysCurrency?.value || 'EUR');
+    const parent = input.parentNode;
+    parent.insertBefore(wrapper, input);
+    wrapper.appendChild(symbol);
+    wrapper.appendChild(input);
+  });
+}
+
+function recalcOutlayTotals() {
+  const tbody = document.getElementById('outlaysBody');
+  if (!tbody) return;
+
+  let totalPda = 0;
+  let totalSailing = 0;
+  let runningPda = 0;
+  let runningSailing = 0;
+  const bankRow = tbody.querySelector('tr[data-row="bank-charges"]');
+  const bankRateInput = document.getElementById('bankRate');
+  const bankRate = parsePercentValue(bankRateInput?.value) / 100;
+
+  tbody.querySelectorAll('tr').forEach((row) => {
+    if (row === bankRow) {
+      const bankPda = runningPda * bankRate;
+      const bankSailing = runningSailing * bankRate;
+      const bankPdaInput = document.getElementById('bankPda');
+      const bankSailingInput = document.getElementById('bankSailing');
+      if (bankPdaInput) bankPdaInput.value = formatMoneyValue(bankPda);
+      if (bankSailingInput) bankSailingInput.value = formatMoneyValue(bankSailing);
+      totalPda += bankPda;
+      totalSailing += bankSailing;
+      return;
+    }
+
+    const inputs = row.querySelectorAll('input.cell-input.money');
+    const pdaValue = inputs.length >= 1 ? parseMoneyValue(inputs[0].value) : 0;
+    const sailingValue = inputs.length >= 2 ? parseMoneyValue(inputs[1].value) : 0;
+    runningPda += pdaValue;
+    runningSailing += sailingValue;
+    totalPda += pdaValue;
+    totalSailing += sailingValue;
+  });
+
+  const totalPdaInput = document.getElementById('totalPda');
+  const totalSailingInput = document.getElementById('totalSailing');
+  if (totalPdaInput) totalPdaInput.value = formatMoneyValue(totalPda);
+  if (totalSailingInput) totalSailingInput.value = formatMoneyValue(totalSailing);
+}
+
+function removeOutlayRow(row) {
+  const tbody = document.getElementById('outlaysBody');
+  if (!tbody || !row) return;
+
+  const rows = tbody.querySelectorAll('tr');
+  if (rows.length <= 1) {
+    clearOutlayRow(row);
+    return;
+  }
+
+  row.remove();
+  recalcOutlayTotals();
+}
+
+function setSailingVisible(visible) {
+  if (!outlaysTable) return;
+  outlaysTable.classList.toggle('hide-sailing', !visible);
+  requestAnimationFrame(() => {
+    void outlaysTable.offsetWidth;
+    requestAnimationFrame(refreshOutlayLayout);
+  });
+}
+
+function autoSizeInput(input) {
+  if (!input) return;
+  const value = input.value || input.placeholder || '';
+  const length = Math.max(value.length, 4);
+  input.style.width = `${length + 1}ch`;
+}
+
+function setDensity(mode) {
+  document.body.classList.toggle('density-comfortable', mode === 'comfortable');
+  document.body.classList.toggle('density-dense', mode === 'dense');
+  if (densityComfortable) densityComfortable.classList.toggle('active', mode === 'comfortable');
+  if (densityDense) densityDense.classList.toggle('active', mode === 'dense');
+}
+
+function getDensityMode() {
+  if (document.body.classList.contains('density-dense')) return 'dense';
+  if (document.body.classList.contains('density-comfortable')) return 'comfortable';
+  return 'none';
+}
+
+function applyPrintDensity() {
+  const current = getDensityMode();
+  if (current !== 'dense') {
+    printRestoreDensity = current;
+    setDensity('dense');
+  }
+}
+
+function printFit() {
+  applyPrintDensity();
+  document.body.classList.add('print-fit');
+  updatePrintHidden();
+  setTimeout(() => {
+    window.print();
+  }, 50);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function exportToExcel() {
+  const outlaysBody = document.getElementById('outlaysBody');
+  if (!outlaysBody) return;
+
+  const dateValue = document.getElementById('dateInput')?.value || '';
+  const noteValue = document.getElementById('titleNote')?.value || '';
+  const currencyValue = outlaysCurrency ? outlaysCurrency.value : '';
+  const includeSailing = outlaysTable ? !outlaysTable.classList.contains('hide-sailing') : true;
+
+  const headerRows = [];
+  headerRows.push(['Title', 'PRO-FORMA D/A']);
+  if (noteValue.trim()) headerRows.push(['Note', noteValue]);
+  headerRows.push(['Split', dateValue]);
+  if (currencyValue) headerRows.push(['Outlays Currency', currencyValue]);
+
+  const detailRows = [];
+  document.querySelectorAll('.card-row .card .row > div').forEach((group) => {
+    const label = group.querySelector('label')?.textContent?.trim() || '';
+    const value = group.querySelector('input')?.value || '';
+    if (label) detailRows.push([label, value]);
+  });
+
+  const outlayRows = [];
+  outlaysBody.querySelectorAll('tr').forEach((row) => {
+    const descInput = row.querySelector('textarea, input');
+    let descValue = descInput ? descInput.value : '';
+    if (row.dataset.row === 'bank-charges') {
+      const rate = document.getElementById('bankRate')?.value || '';
+      if (rate) descValue = `${descValue} (${rate}%)`;
+    }
+    const pdaValue = row.querySelector('td:nth-child(2) input')?.value || '';
+    const sailingValue = row.querySelector('td:nth-child(3) input')?.value || '';
+    outlayRows.push([descValue, pdaValue, sailingValue]);
+  });
+
+  const totalPda = document.getElementById('totalPda')?.value || '';
+  const totalSailing = document.getElementById('totalSailing')?.value || '';
+
+  const columnCount = includeSailing ? 3 : 2;
+  const outlayHeaderCells = includeSailing
+    ? `<th>Outlays</th><th>PDA (${escapeHtml(currencyValue)})</th><th>Sailing PDA (${escapeHtml(currencyValue)})</th>`
+    : `<th>Outlays</th><th>PDA (${escapeHtml(currencyValue)})</th>`;
+
+  const outlayBodyRows = outlayRows
+    .map((row) => {
+      const cells = includeSailing
+        ? `<td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td><td>${escapeHtml(row[2])}</td>`
+        : `<td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td>`;
+      return `<tr>${cells}</tr>`;
+    })
+    .join('');
+
+  const totalCells = includeSailing
+    ? `<td>Total (${escapeHtml(currencyValue)})</td><td>${escapeHtml(totalPda)}</td><td>${escapeHtml(totalSailing)}</td>`
+    : `<td>Total (${escapeHtml(currencyValue)})</td><td>${escapeHtml(totalPda)}</td>`;
+
+  const headerTable = `
+    <table>
+      ${headerRows
+        .map((row) => `<tr><th>${escapeHtml(row[0])}</th><td>${escapeHtml(row[1])}</td></tr>`)
+        .join('')}
+    </table>
+  `;
+
+  const detailTable = `
+    <table>
+      <tr><th colspan="2">Details</th></tr>
+      ${detailRows
+        .map((row) => `<tr><th>${escapeHtml(row[0])}</th><td>${escapeHtml(row[1])}</td></tr>`)
+        .join('')}
+    </table>
+  `;
+
+  const outlayTable = `
+    <table>
+      <tr><th colspan="${columnCount}">Outlays &amp; Charges Expressed In ${escapeHtml(currencyValue)}</th></tr>
+      <tr>${outlayHeaderCells}</tr>
+      ${outlayBodyRows}
+      <tr>${totalCells}</tr>
+    </table>
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        table { border-collapse: collapse; margin-bottom: 12px; }
+        th, td { border: 1px solid #9ca3af; padding: 4px 6px; text-align: left; }
+        th { background: #e5e7eb; font-weight: 700; }
+      </style>
+    </head>
+    <body>
+      ${headerTable}
+      ${detailTable}
+      ${outlayTable}
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeDate = dateValue.replace(/[^\d-]/g, '') || 'pro-forma';
+  link.href = url;
+  link.download = `pro-forma-da-${safeDate}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function openTugsCalculator() {
+  window.location.href = 'tugs-calculator.html';
+}
+
+function goHome() {
+  saveTugsState();
+  window.location.href = 'index.html';
+}
+
+function updatePrintHidden() {
+  document.querySelectorAll('[data-print-hide-empty]').forEach((input) => {
+    const empty = !(input.value || '').trim();
+    input.classList.toggle('print-hide', empty);
+    const group = input.closest('[data-print-hide-group]');
+    if (group) group.classList.toggle('print-hide', empty);
+  });
+}
+
+function clearPrintHidden() {
+  document.querySelectorAll('.print-hide').forEach((el) => {
+    el.classList.remove('print-hide');
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const rows = [...container.querySelectorAll('tr:not(.dragging)')];
+  let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+  rows.forEach((row) => {
+    const box = row.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      closest = { offset, element: row };
+    }
+  });
+  return closest.element;
+}
+
+function initIndex() {
+  const outlaysBody = document.getElementById('outlaysBody');
+  if (!outlaysBody) return;
+
+  document.body.classList.add('density-comfortable');
+  decorateOutlayRows();
+  recalcOutlayTotals();
+  refreshOutlayLayout();
+
+  outlaysBody.addEventListener('click', (event) => {
+    const button = event.target.closest('.row-remove');
+    if (!button) return;
+    const row = button.closest('tr');
+    removeOutlayRow(row);
+  });
+
+  outlaysBody.addEventListener('dragstart', (event) => {
+    const handle = event.target.closest('.row-handle');
+    if (!handle) return;
+    const row = handle.closest('tr');
+    if (!row) return;
+    draggingRow = row;
+    row.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', '');
+  });
+
+  outlaysBody.addEventListener('dragend', () => {
+    if (draggingRow) draggingRow.classList.remove('dragging');
+    draggingRow = null;
+  });
+
+  outlaysBody.addEventListener('dragover', (event) => {
+    if (!draggingRow) return;
+    event.preventDefault();
+    const afterElement = getDragAfterElement(outlaysBody, event.clientY);
+    const bankRow = outlaysBody.querySelector('tr[data-row="bank-charges"]');
+    if (!afterElement) {
+      if (bankRow) {
+        outlaysBody.insertBefore(draggingRow, bankRow);
+      } else {
+        outlaysBody.appendChild(draggingRow);
+      }
+    } else if (afterElement !== draggingRow) {
+      if (bankRow && afterElement === bankRow) {
+        outlaysBody.insertBefore(draggingRow, bankRow);
+      } else {
+        outlaysBody.insertBefore(draggingRow, afterElement);
+      }
+    }
+  });
+
+  outlaysBody.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!target) return;
+    if (target.tagName === 'TEXTAREA') {
+      autoResizeTextarea(target);
+    }
+    if (target.classList.contains('money') || target.classList.contains('percent-input')) {
+      recalcOutlayTotals();
+    }
+  });
+
+  outlaysTable = document.querySelector('.outlays-table');
+  toggleSailing = document.getElementById('toggleSailing');
+  outlaysCurrency = document.getElementById('outlaysCurrency');
+  if (toggleSailing) {
+    toggleSailing.addEventListener('change', () => {
+      setSailingVisible(toggleSailing.checked);
+    });
+    setSailingVisible(toggleSailing.checked);
+  }
+  wrapMoneyFields();
+  if (outlaysCurrency) {
+    updateCurrencySymbol(outlaysCurrency.value);
+    outlaysCurrency.addEventListener('change', () => {
+      updateCurrencySymbol(outlaysCurrency.value);
+    });
+  }
+
+  const gtInputIndex = document.getElementById('grossTonnage');
+  if (gtInputIndex) {
+    updateIndexGtFromStorage();
+    gtInputIndex.addEventListener('input', () => {
+      const value = gtInputIndex.value.trim();
+      if (value) safeStorageSet(STORAGE_KEYS.gt, value);
+      else safeStorageRemove(STORAGE_KEYS.gt);
+    });
+  }
+
+  const towageDesc = document.querySelector('tr[data-row="towage"] textarea.cell-input.text');
+  if (towageDesc) {
+    towageDesc.dataset.baseText = 'TOWAGE';
+    towageDesc.addEventListener('input', () => {
+      towageDesc.dataset.baseText = 'TOWAGE';
+    });
+  }
+
+  const titleNote = document.getElementById('titleNote');
+  if (titleNote) {
+    autoSizeInput(titleNote);
+    titleNote.addEventListener('input', () => autoSizeInput(titleNote));
+  }
+
+  const dateInput = document.getElementById('dateInput');
+  if (dateInput && !dateInput.value) {
+    const now = new Date();
+    const day = String(now.getDate());
+    const month = String(now.getMonth() + 1);
+    const year = String(now.getFullYear()).slice(-2);
+    dateInput.value = `${day}/${month}/${year}`;
+  }
+
+  densityComfortable = document.getElementById('densityComfortable');
+  densityDense = document.getElementById('densityDense');
+  if (densityComfortable) densityComfortable.addEventListener('click', () => setDensity('comfortable'));
+  if (densityDense) densityDense.addEventListener('click', () => setDensity('dense'));
+
+  updateTowageFromStorage();
+  updateIndexGtFromStorage();
+  window.addEventListener('pageshow', updateTowageFromStorage);
+  window.addEventListener('storage', () => {
+    updateTowageFromStorage();
+    updateIndexGtFromStorage();
+  });
+
+  window.addEventListener('afterprint', clearPrintHidden);
+}
+
+// Tug calculator logic
+let tugCount = 0;
+const MIN_VOYAGE = 1;
+const MIN_ASSIST = 0.5;
+let imoMaster = null;
+let linesMaster = null;
+
+function getTariffFromGT(gt) {
+  if (!gt || gt <= 0) return 0;
+
+  if (gt <= 2000) return 698;
+  if (gt <= 5000) return 908;
+  if (gt <= 10000) return 1133;
+  if (gt <= 15000) return 1294;
+  if (gt <= 25000) return 1358;
+  if (gt <= 30000) return 1646;
+  if (gt <= 35000) return 1863;
+
+  const extraThousands = Math.ceil((gt - 35000) / 1000);
+  return 1863 + (extraThousands * 16);
+}
+
+function addTug() {
+  const tugCards = document.getElementById('tugCards');
+  if (!tugCards) return;
+  tugCount++;
+  tugCards.insertAdjacentHTML('beforeend', `
+    <div class="card" id="tug_${tugCount}">
+      <div class="tug-header">
+        <button class="icon-btn" onclick="removeTug(${tugCount})" aria-label="Remove tugboat"><img src="assets/icons/remove_48×48.png" alt="Remove"></button>
+        <h3 class="tug-title">Tugboat</h3>
+        <button class="icon-btn" onclick="duplicateTug(${tugCount})" aria-label="Duplicate tugboat"><img src="assets/icons/duplicate_48x48.png" alt="Duplicate"></button>
+      </div>
+
+      <label>Operation</label>
+      <select id="op_${tugCount}">
+        <option value="arrival">Arrival (IN)</option>
+        <option value="departure">Departure (OUT)</option>
+      </select>
+
+      <label>Voyage Time</label>
+      <select id="voyage_${tugCount}">
+        <option value="1">1 hour</option>
+        <option value="1.5">1.5 hours</option>
+      </select>
+
+      <label>Assistance Time</label>
+      <select id="assist_${tugCount}">
+        <option value="0.5">Up to 30 min</option>
+        <option value="1">Within 1 hour</option>
+        <option value="1.5">Within 1.5 hours</option>
+      </select>
+
+      <div class="section-title">Assistance Surcharges</div>
+      <label class="checkbox"><input type="checkbox" id="imo_${tugCount}" /> 20% IMO Code Classes I-III</label>
+      <label class="checkbox"><input type="checkbox" id="lines_${tugCount}" /> 15% Usage of tug lines</label>
+      <label class="checkbox"><input type="checkbox" id="kw_${tugCount}" /> 30% Tug above 2000 kW</label>
+
+      <div class="section-title">Overtime</div>
+      <label>Voyage Overtime</label>
+      <select id="voy_ot_${tugCount}">
+        <option value="0"></option>
+        <option value="0.25">25% (Mon–Sat)</option>
+        <option value="0.50">50% (Sun & Holidays)</option>
+      </select>
+
+      <label>Assistance Overtime</label>
+      <select id="assist_ot_${tugCount}">
+        <option value="0"></option>
+        <option value="0.25">25% (Mon–Sat)</option>
+        <option value="0.50">50% (Sun & Holidays)</option>
+      </select>
+
+      <div class="tug-total" id="tugTotal_${tugCount}">Tug total: €0.00</div>
+    </div>
+  `);
+
+  applyImoMaster();
+  applyLinesMaster();
+  syncImoMaster();
+  syncLinesMaster();
+  updateTugTitles();
+  calculate();
+}
+
+function removeTug(id) {
+  document.getElementById(`tug_${id}`)?.remove();
+  syncImoMaster();
+  syncLinesMaster();
+  updateTugTitles();
+  calculate();
+}
+
+function duplicateTug(id) {
+  const source = document.getElementById(`tug_${id}`);
+  if (!source) return;
+
+  addTug();
+  const newId = tugCount;
+
+  const fields = [
+    ['op', 'value'],
+    ['voyage', 'value'],
+    ['assist', 'value'],
+    ['imo', 'checked'],
+    ['lines', 'checked'],
+    ['kw', 'checked'],
+    ['voy_ot', 'value'],
+    ['assist_ot', 'value']
+  ];
+
+  for (const [key, prop] of fields) {
+    const from = document.getElementById(`${key}_${id}`);
+    const to = document.getElementById(`${key}_${newId}`);
+    if (!from || !to) continue;
+    to[prop] = from[prop];
+  }
+
+  syncImoMaster();
+  syncLinesMaster();
+  updateTugTitles();
+  calculate();
+}
+
+function duplicateLastTug() {
+  const selectedId = getSelectedTugId();
+  if (selectedId) {
+    duplicateTug(selectedId);
+    return;
+  }
+  const cards = document.querySelectorAll('#tugCards .card');
+  if (cards.length === 0) {
+    addTug();
+    return;
+  }
+  const last = cards[cards.length - 1];
+  const id = last.id.split('_')[1];
+  duplicateTug(Number(id));
+}
+
+function setSelectedTug(id) {
+  const cards = document.querySelectorAll('#tugCards .card');
+  cards.forEach(card => card.classList.remove('selected'));
+  const target = document.getElementById(`tug_${id}`);
+  if (target) target.classList.add('selected');
+}
+
+function getSelectedTugId() {
+  const selected = document.querySelector('#tugCards .card.selected');
+  if (!selected) return null;
+  const parts = selected.id.split('_');
+  return parts.length > 1 ? Number(parts[1]) : null;
+}
+
+function applyImoMaster() {
+  if (!imoMaster) return;
+  const checked = imoMaster.checked;
+  imoMaster.indeterminate = false;
+  for (let i = 1; i <= tugCount; i++) {
+    const cb = document.getElementById(`imo_${i}`);
+    if (cb) cb.checked = checked;
+  }
+}
+
+function applyLinesMaster() {
+  if (!linesMaster) return;
+  const checked = linesMaster.checked;
+  linesMaster.indeterminate = false;
+  for (let i = 1; i <= tugCount; i++) {
+    const cb = document.getElementById(`lines_${i}`);
+    if (cb) cb.checked = checked;
+  }
+}
+
+function syncImoMaster() {
+  if (!imoMaster) return;
+  let total = 0;
+  let checked = 0;
+  for (let i = 1; i <= tugCount; i++) {
+    const cb = document.getElementById(`imo_${i}`);
+    if (!cb) continue;
+    total++;
+    if (cb.checked) checked++;
+  }
+  if (total === 0) {
+    imoMaster.checked = false;
+    imoMaster.indeterminate = false;
+    return;
+  }
+  if (checked === 0) {
+    imoMaster.checked = false;
+    imoMaster.indeterminate = false;
+  } else if (checked === total) {
+    imoMaster.checked = true;
+    imoMaster.indeterminate = false;
+  } else {
+    imoMaster.checked = false;
+    imoMaster.indeterminate = true;
+  }
+}
+
+function syncLinesMaster() {
+  if (!linesMaster) return;
+  let total = 0;
+  let checked = 0;
+  for (let i = 1; i <= tugCount; i++) {
+    const cb = document.getElementById(`lines_${i}`);
+    if (!cb) continue;
+    total++;
+    if (cb.checked) checked++;
+  }
+  if (total === 0) {
+    linesMaster.checked = false;
+    linesMaster.indeterminate = false;
+    return;
+  }
+  if (checked === 0) {
+    linesMaster.checked = false;
+    linesMaster.indeterminate = false;
+  } else if (checked === total) {
+    linesMaster.checked = true;
+    linesMaster.indeterminate = false;
+  } else {
+    linesMaster.checked = false;
+    linesMaster.indeterminate = true;
+  }
+}
+
+function updateTugTitles() {
+  const cards = document.querySelectorAll('#tugCards .card');
+  let arrivalIndex = 0;
+  let departureIndex = 0;
+
+  cards.forEach(card => {
+    const id = card.id.split('_')[1];
+    const op = document.getElementById(`op_${id}`)?.value;
+    const title = card.querySelector('.tug-title');
+    if (!title) return;
+
+    if (op === 'arrival') {
+      arrivalIndex++;
+      title.innerText = `${arrivalIndex}${getOrdinal(arrivalIndex)} Tugboat on arrival`;
+    } else {
+      departureIndex++;
+      title.innerText = `${departureIndex}${getOrdinal(departureIndex)} Tugboat on departure`;
+    }
+  });
+}
+
+function getOrdinal(n) {
+  if (n % 10 === 1 && n % 100 !== 11) return 'st';
+  if (n % 10 === 2 && n % 100 !== 12) return 'nd';
+  if (n % 10 === 3 && n % 100 !== 13) return 'rd';
+  return 'th';
+}
+
+function calculate() {
+  saveTugsState();
+  const tariffInput = document.getElementById('tariff');
+  const final = document.getElementById('finalTotal');
+  if (!tariffInput || !final) return;
+
+  const tariff = Number(tariffInput.value) || 0;
+  if (!tariff) {
+    final.style.display = 'none';
+    return;
+  }
+
+  let arrivalTotal = 0;
+  let departureTotal = 0;
+  let arrivalCount = 0;
+  let departureCount = 0;
+
+  for (let i = 1; i <= tugCount; i++) {
+    if (!document.getElementById(`tug_${i}`)) continue;
+
+    let voyage = Number(document.getElementById(`voyage_${i}`).value);
+    let assist = Number(document.getElementById(`assist_${i}`).value);
+    const op = document.getElementById(`op_${i}`).value;
+
+    if (op === 'arrival') arrivalCount += 1;
+    else departureCount += 1;
+
+    voyage = Math.max(voyage, MIN_VOYAGE);
+    assist = Math.max(assist, MIN_ASSIST);
+
+    const voyageOT = Number(document.getElementById(`voy_ot_${i}`).value);
+    const assistOT = Number(document.getElementById(`assist_ot_${i}`).value);
+
+    const voyageCost = tariff * voyage * (1 + voyageOT);
+
+    let assistMultiplier = 1 + assistOT;
+    if (document.getElementById(`imo_${i}`).checked) assistMultiplier += 0.20;
+    if (document.getElementById(`lines_${i}`).checked) assistMultiplier += 0.15;
+    if (document.getElementById(`kw_${i}`).checked) assistMultiplier += 0.30;
+
+    const assistCost = tariff * assist * assistMultiplier;
+    const total = voyageCost + assistCost;
+
+    document.getElementById(`tugTotal_${i}`).innerText = `Tug total: €${total.toFixed(2)}`;
+
+    if (op === 'arrival') arrivalTotal += total;
+    else departureTotal += total;
+  }
+
+  if (arrivalTotal === 0 && departureTotal === 0) {
+    final.style.display = 'none';
+    return;
+  }
+
+  final.style.display = 'block';
+  final.innerHTML = `
+    <div class="summary">
+      <div><strong>Arrival total</strong><br>€${arrivalTotal.toFixed(2)}</div>
+      <div><strong>Departure total</strong><br>€${departureTotal.toFixed(2)}</div>
+      <div><strong>Grand total</strong><br>€${(arrivalTotal + departureTotal).toFixed(2)}</div>
+    </div>
+  `;
+
+  const grandTotal = arrivalTotal + departureTotal;
+  if (Number.isFinite(grandTotal)) {
+    safeStorageSet(STORAGE_KEYS.towageTotal, grandTotal.toFixed(2));
+    safeStorageSet(STORAGE_KEYS.towageArrivalCount, arrivalCount);
+    safeStorageSet(STORAGE_KEYS.towageDepartureCount, departureCount);
+  }
+}
+
+function initTugs() {
+  const tugCards = document.getElementById('tugCards');
+  if (!tugCards) return;
+
+  const gtInput = document.getElementById('gt');
+  if (gtInput) {
+    const syncGtAndTariff = () => {
+      const storedGt = safeStorageGet(STORAGE_KEYS.gt);
+      if (storedGt && gtInput.value !== storedGt) {
+        gtInput.value = storedGt;
+      }
+      const gt = Number(gtInput.value);
+      const tariff = getTariffFromGT(gt);
+      const tariffInput = document.getElementById('tariff');
+      if (tariffInput) tariffInput.value = tariff || '';
+    };
+
+    syncGtAndTariff();
+    gtInput.addEventListener('input', () => {
+      const gt = Number(gtInput.value);
+      const tariff = getTariffFromGT(gt);
+      const tariffInput = document.getElementById('tariff');
+      if (tariffInput) tariffInput.value = tariff || '';
+      const value = gtInput.value.trim();
+      if (value) safeStorageSet(STORAGE_KEYS.gt, value);
+      else safeStorageRemove(STORAGE_KEYS.gt);
+      calculate();
+    });
+
+    window.addEventListener('storage', (event) => {
+      if (event.key === STORAGE_KEYS.gt) {
+        syncGtAndTariff();
+        calculate();
+      }
+    });
+  }
+
+  document.addEventListener('input', calculate);
+  document.addEventListener('change', () => {
+    updateTugTitles();
+    calculate();
+  });
+
+  tugCards.addEventListener('click', (event) => {
+    const card = event.target.closest('.card');
+    if (!card) return;
+    const id = card.id.split('_')[1];
+    setSelectedTug(id);
+  });
+
+  imoMaster = document.getElementById('imoMaster');
+  linesMaster = document.getElementById('linesMaster');
+
+  if (imoMaster) {
+    imoMaster.addEventListener('change', () => {
+      applyImoMaster();
+      calculate();
+    });
+  }
+
+  if (linesMaster) {
+    linesMaster.addEventListener('change', () => {
+      applyLinesMaster();
+      calculate();
+    });
+  }
+
+  document.addEventListener('change', (event) => {
+    const target = event.target;
+    if (target && target.id && target.id.startsWith('imo_')) {
+      syncImoMaster();
+    }
+    if (target && target.id && target.id.startsWith('lines_')) {
+      syncLinesMaster();
+    }
+  });
+
+  if (!restoreTugsState()) {
+    addTug();
+  }
+}
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('print-fit');
+  if (printRestoreDensity === 'comfortable') {
+    setDensity('comfortable');
+  } else if (printRestoreDensity === 'none') {
+    document.body.classList.remove('density-comfortable', 'density-dense');
+  }
+  printRestoreDensity = null;
+  clearPrintHidden();
+});
+
+window.addEventListener('beforeprint', () => {
+  applyPrintDensity();
+  updatePrintHidden();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  initIndex();
+  initTugs();
+});
