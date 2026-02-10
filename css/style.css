@@ -337,11 +337,14 @@ body {margin: 0;
     body.page-index .money-field .currency-symbol{
       font-weight: 700;
       color: #0f766e;
+      order: 2;
+      white-space: nowrap;
     }
 
     body.page-index .money-field input{
       flex: 1;
       min-width: 0;
+      order: 1;
     }
 
     body.page-index .cell-input.text{
@@ -412,6 +415,16 @@ body {margin: 0;
       width: 20px;
       height: 20px;
       display: block;
+    }
+
+    body.page-index .money-edit{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    body.page-index .money-edit .money-edit-btn{
+      flex: 0 0 auto;
     }
 
     body.page-index .row-item .cell-input.text{
@@ -696,6 +709,9 @@ body {margin: 0;
         border-color: transparent !important;
         box-shadow: none !important;
         outline: none !important;
+      }
+      body.page-index .money-field .currency-symbol{
+        opacity: 0.6;
       }
       body.page-index th, body.page-index td{ padding: 1px 3px; font-size: 8.5px; line-height: 1.05; }
       body.page-index tfoot td{ font-size: 10px; padding-top: 5px; padding-bottom: 5px; }

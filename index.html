@@ -142,17 +142,28 @@
                   <button class="row-handle" type="button" draggable="true" aria-label="Move row">
                     <img src="assets/icons/move_grabber_48×48.png" alt="" />
                   </button>
-                  <button class="row-edit" type="button" aria-label="Edit row" onclick="openTugsCalculator()">
-                    <img src="assets/icons/edit_48x48.png" alt="" />
-                  </button>
                   <textarea class="cell-input text" rows="1">TOWAGE 3 in overtime wh + 3 out normal wh</textarea>
                   <button class="row-remove" type="button" aria-label="Remove row">
                     <img src="assets/icons/remove_48×48.png" alt="" />
                   </button>
                 </div>
               </td>
-              <td><input class="cell-input money" value="28.300,00" /></td>
-              <td><input class="cell-input money" value="28.300,00" /></td>
+              <td>
+                <div class="money-edit">
+                  <button class="row-edit money-edit-btn" type="button" aria-label="Edit towage" onclick="openTugsCalculator()">
+                    <img src="assets/icons/edit_48x48.png" alt="" />
+                  </button>
+                  <input class="cell-input money" value="28.300,00" />
+                </div>
+              </td>
+              <td>
+                <div class="money-edit">
+                  <button class="row-edit money-edit-btn" type="button" aria-label="Edit towage sailing" onclick="openTugsCalculatorSailing()">
+                    <img src="assets/icons/edit_48x48.png" alt="" />
+                  </button>
+                  <input class="cell-input money" value="28.300,00" />
+                </div>
+              </td>
             </tr>
             <tr>
               <td class="desc"><textarea class="cell-input text" rows="1">DANGEROUS CARGO PERMIT</textarea></td>

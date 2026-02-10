@@ -11,7 +11,26 @@ const STORAGE_KEYS = {
   towageTotal: 'pda_towage_total',
   towageArrivalCount: 'pda_towage_arrival_count',
   towageDepartureCount: 'pda_towage_departure_count',
-  tugsState: 'pda_tugs_state'
+  tugsState: 'pda_tugs_state',
+  towageTotalSailing: 'pda_towage_total_sailing',
+  towageArrivalCountSailing: 'pda_towage_arrival_count_sailing',
+  towageDepartureCountSailing: 'pda_towage_departure_count_sailing',
+  tugsStateSailing: 'pda_tugs_state_sailing'
+};
+
+const TUG_STORAGE = {
+  standard: {
+    towageTotal: STORAGE_KEYS.towageTotal,
+    towageArrivalCount: STORAGE_KEYS.towageArrivalCount,
+    towageDepartureCount: STORAGE_KEYS.towageDepartureCount,
+    tugsState: STORAGE_KEYS.tugsState
+  },
+  sailing: {
+    towageTotal: STORAGE_KEYS.towageTotalSailing,
+    towageArrivalCount: STORAGE_KEYS.towageArrivalCountSailing,
+    towageDepartureCount: STORAGE_KEYS.towageDepartureCountSailing,
+    tugsState: STORAGE_KEYS.tugsStateSailing
+  }
 };
 
 function safeStorageGet(key) {
@@ -40,8 +59,17 @@ function safeStorageRemove(key) {
 
 let isRestoringTugs = false;
 
-function getTugsState() {
-  const raw = safeStorageGet(STORAGE_KEYS.tugsState);
+function isSailingTugsPage() {
+  return document.body && document.body.classList.contains('page-tugs-sailing');
+}
+
+function getTugStorageKeys(isSailing) {
+  return isSailing ? TUG_STORAGE.sailing : TUG_STORAGE.standard;
+}
+
+function getTugsState(isSailing) {
+  const keys = getTugStorageKeys(isSailing);
+  const raw = safeStorageGet(keys.tugsState);
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -55,6 +83,7 @@ function saveTugsState() {
   const tugCards = document.getElementById('tugCards');
   if (!tugCards) return;
 
+  const keys = getTugStorageKeys(isSailingTugsPage());
   const tugs = Array.from(tugCards.querySelectorAll('.card')).map((card) => {
     const id = card.id.split('_')[1];
     return {
@@ -75,14 +104,14 @@ function saveTugsState() {
     tugs
   };
 
-  safeStorageSet(STORAGE_KEYS.tugsState, JSON.stringify(state));
+  safeStorageSet(keys.tugsState, JSON.stringify(state));
 }
 
 function restoreTugsState() {
   const tugCards = document.getElementById('tugCards');
   if (!tugCards) return false;
 
-  const state = getTugsState();
+  const state = getTugsState(isSailingTugsPage());
   if (!state || !Array.isArray(state.tugs) || state.tugs.length === 0) return false;
 
   isRestoringTugs = true;
@@ -228,9 +257,13 @@ function updateTowageFromStorage() {
     descInput.dataset.baseText = 'TOWAGE';
   }
 
-  const totalRaw = safeStorageGet(STORAGE_KEYS.towageTotal);
-  const arrivalCountRaw = safeStorageGet(STORAGE_KEYS.towageArrivalCount);
-  const departureCountRaw = safeStorageGet(STORAGE_KEYS.towageDepartureCount);
+  const pdaKeys = getTugStorageKeys(false);
+  const sailingKeys = getTugStorageKeys(true);
+
+  const totalRaw = safeStorageGet(pdaKeys.towageTotal);
+  const sailingTotalRaw = safeStorageGet(sailingKeys.towageTotal);
+  const arrivalCountRaw = safeStorageGet(pdaKeys.towageArrivalCount);
+  const departureCountRaw = safeStorageGet(pdaKeys.towageDepartureCount);
 
   const arrivalCount = Number(arrivalCountRaw);
   const departureCount = Number(departureCountRaw);
@@ -243,12 +276,17 @@ function updateTowageFromStorage() {
   }
 
   const totalValue = Number(totalRaw);
-  if (Number.isFinite(totalValue)) {
-    const formatted = formatMoneyValue(totalValue);
-    const pdaInput = towageRow.querySelector('td:nth-child(2) input');
-    const sailingInput = towageRow.querySelector('td:nth-child(3) input');
-    if (pdaInput) pdaInput.value = formatted;
-    if (sailingInput) sailingInput.value = formatted;
+  const pdaInput = towageRow.querySelector('td:nth-child(2) input');
+  const sailingInput = towageRow.querySelector('td:nth-child(3) input');
+
+  if (Number.isFinite(totalValue) && pdaInput) {
+    pdaInput.value = formatMoneyValue(totalValue);
+  }
+  const sailingTotalValue = Number(sailingTotalRaw);
+  if (Number.isFinite(sailingTotalValue) && sailingInput) {
+    sailingInput.value = formatMoneyValue(sailingTotalValue);
+  }
+  if (Number.isFinite(totalValue) || Number.isFinite(sailingTotalValue)) {
     recalcOutlayTotals();
   }
 }
@@ -554,6 +592,10 @@ function exportToExcel() {
 
 function openTugsCalculator() {
   window.location.href = 'tugs-calculator.html';
+}
+
+function openTugsCalculatorSailing() {
+  window.location.href = 'tugs-sailing-pda.html';
 }
 
 function goHome() {
@@ -1039,9 +1081,10 @@ function calculate() {
 
   const grandTotal = arrivalTotal + departureTotal;
   if (Number.isFinite(grandTotal)) {
-    safeStorageSet(STORAGE_KEYS.towageTotal, grandTotal.toFixed(2));
-    safeStorageSet(STORAGE_KEYS.towageArrivalCount, arrivalCount);
-    safeStorageSet(STORAGE_KEYS.towageDepartureCount, departureCount);
+    const keys = getTugStorageKeys(isSailingTugsPage());
+    safeStorageSet(keys.towageTotal, grandTotal.toFixed(2));
+    safeStorageSet(keys.towageArrivalCount, arrivalCount);
+    safeStorageSet(keys.towageDepartureCount, departureCount);
   }
 }
 
