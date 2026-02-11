@@ -7,6 +7,7 @@ let densityDense = null;
 let printRestoreDensity = null;
 let outlaysCurrency = null;
 const STORAGE_KEYS = {
+  vesselName: 'pda_vessel_name',
   gt: 'pda_gt',
   towageTotal: 'pda_towage_total',
   towageArrivalCount: 'pda_towage_arrival_count',
@@ -141,7 +142,10 @@ function restoreTugsState() {
   });
 
   const vesselName = document.getElementById('vesselName');
-  if (vesselName) vesselName.value = state.vesselName || '';
+  if (vesselName) {
+    vesselName.value = state.vesselName || '';
+    updateVesselNameFromStorage(vesselName);
+  }
 
   const gtInput = document.getElementById('gt');
   if (gtInput) {
@@ -298,6 +302,15 @@ function updateIndexGtFromStorage() {
   if (!storedGt) return;
   if (gtInputIndex.value !== storedGt) {
     gtInputIndex.value = storedGt;
+  }
+}
+
+function updateVesselNameFromStorage(targetInput) {
+  if (!targetInput) return;
+  const storedName = safeStorageGet(STORAGE_KEYS.vesselName);
+  if (!storedName) return;
+  if (targetInput.value !== storedName) {
+    targetInput.value = storedName;
   }
 }
 
@@ -711,6 +724,16 @@ function initIndex() {
     });
   }
 
+  const vesselNameIndex = document.getElementById('vesselNameIndex');
+  if (vesselNameIndex) {
+    updateVesselNameFromStorage(vesselNameIndex);
+    vesselNameIndex.addEventListener('input', () => {
+      const value = vesselNameIndex.value.trim();
+      if (value) safeStorageSet(STORAGE_KEYS.vesselName, value);
+      else safeStorageRemove(STORAGE_KEYS.vesselName);
+    });
+  }
+
   const gtInputIndex = document.getElementById('grossTonnage');
   if (gtInputIndex) {
     updateIndexGtFromStorage();
@@ -755,6 +778,7 @@ function initIndex() {
   window.addEventListener('storage', () => {
     updateTowageFromStorage();
     updateIndexGtFromStorage();
+    updateVesselNameFromStorage(vesselNameIndex);
   });
 
   window.addEventListener('afterprint', clearPrintHidden);
@@ -1025,6 +1049,9 @@ function calculate() {
   const tariff = Number(tariffInput.value) || 0;
   if (!tariff) {
     final.style.display = 'none';
+    const keys = getTugStorageKeys(isSailingTugsPage());
+    safeStorageSet(keys.towageArrivalCount, 0);
+    safeStorageSet(keys.towageDepartureCount, 0);
     return;
   }
 
@@ -1067,6 +1094,9 @@ function calculate() {
 
   if (arrivalTotal === 0 && departureTotal === 0) {
     final.style.display = 'none';
+    const keys = getTugStorageKeys(isSailingTugsPage());
+    safeStorageSet(keys.towageArrivalCount, arrivalCount);
+    safeStorageSet(keys.towageDepartureCount, departureCount);
     return;
   }
 
@@ -1091,6 +1121,16 @@ function calculate() {
 function initTugs() {
   const tugCards = document.getElementById('tugCards');
   if (!tugCards) return;
+
+  const vesselNameInput = document.getElementById('vesselName');
+  if (vesselNameInput) {
+    updateVesselNameFromStorage(vesselNameInput);
+    window.addEventListener('storage', (event) => {
+      if (event.key === STORAGE_KEYS.vesselName) {
+        updateVesselNameFromStorage(vesselNameInput);
+      }
+    });
+  }
 
   const gtInput = document.getElementById('gt');
   if (gtInput) {
@@ -1166,7 +1206,7 @@ function initTugs() {
   });
 
   if (!restoreTugsState()) {
-    addTug();
+    // start with no tugs; user adds manually
   }
 }
 
