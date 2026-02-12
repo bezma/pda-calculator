@@ -9,6 +9,7 @@ let outlaysCurrency = null;
 const STORAGE_KEYS = {
   vesselName: 'pda_vessel_name',
   gt: 'pda_gt',
+  indexState: 'pda_index_state',
   towageTotal: 'pda_towage_total',
   towageArrivalCount: 'pda_towage_arrival_count',
   towageDepartureCount: 'pda_towage_departure_count',
@@ -18,6 +19,23 @@ const STORAGE_KEYS = {
   towageDepartureCountSailing: 'pda_towage_departure_count_sailing',
   tugsStateSailing: 'pda_tugs_state_sailing'
 };
+
+const INDEX_FIELD_IDS = [
+  'titleNote',
+  'dateInput',
+  'vesselNameIndex',
+  'grossTonnage',
+  'lengthOverall',
+  'bowThrusterFitted',
+  'portInput',
+  'berthTerminal',
+  'operationsInput',
+  'cargoInput',
+  'quantityInput',
+  'toggleSailing',
+  'outlaysCurrency',
+  'bankRate'
+];
 
 const TUG_STORAGE = {
   standard: {
@@ -56,6 +74,92 @@ function safeStorageRemove(key) {
   } catch (error) {
     // ignore storage errors
   }
+}
+
+function readFieldValue(field) {
+  if (!field) return '';
+  if (field.type === 'checkbox') return Boolean(field.checked);
+  return field.value;
+}
+
+function applyFieldValue(field, value) {
+  if (!field || value === undefined || value === null) return;
+  if (field.type === 'checkbox') {
+    field.checked = Boolean(value);
+    return;
+  }
+  field.value = String(value);
+}
+
+function saveIndexState() {
+  const outlaysBody = document.getElementById('outlaysBody');
+  if (!outlaysBody) return;
+
+  const fields = {};
+  INDEX_FIELD_IDS.forEach((id) => {
+    const field = document.getElementById(id);
+    if (!field) return;
+    fields[id] = readFieldValue(field);
+  });
+
+  const outlaysValues = Array.from(outlaysBody.querySelectorAll('tr')).map((row) => {
+    return Array.from(row.querySelectorAll('textarea, input')).map((field) => field.value);
+  });
+
+  const state = {
+    fields,
+    outlaysHtml: outlaysBody.innerHTML,
+    outlaysValues,
+    density: getDensityMode()
+  };
+  safeStorageSet(STORAGE_KEYS.indexState, JSON.stringify(state));
+}
+
+function restoreIndexState() {
+  const outlaysBody = document.getElementById('outlaysBody');
+  if (!outlaysBody) return false;
+
+  const raw = safeStorageGet(STORAGE_KEYS.indexState);
+  if (!raw) return false;
+
+  let state = null;
+  try {
+    state = JSON.parse(raw);
+  } catch (error) {
+    return false;
+  }
+  if (!state || typeof state !== 'object') return false;
+
+  if (typeof state.outlaysHtml === 'string' && state.outlaysHtml.trim()) {
+    outlaysBody.innerHTML = state.outlaysHtml;
+  }
+
+  if (Array.isArray(state.outlaysValues)) {
+    const rows = outlaysBody.querySelectorAll('tr');
+    state.outlaysValues.forEach((values, rowIndex) => {
+      const row = rows[rowIndex];
+      if (!row || !Array.isArray(values)) return;
+      const fields = row.querySelectorAll('textarea, input');
+      values.forEach((value, fieldIndex) => {
+        const field = fields[fieldIndex];
+        if (!field) return;
+        field.value = value == null ? '' : String(value);
+      });
+    });
+  }
+
+  if (state.fields && typeof state.fields === 'object') {
+    INDEX_FIELD_IDS.forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      applyFieldValue(field, state.fields[id]);
+    });
+  }
+
+  if (state.density === 'comfortable' || state.density === 'dense') {
+    setDensity(state.density);
+  }
+  return true;
 }
 
 let isRestoringTugs = false;
@@ -102,6 +206,8 @@ function saveTugsState() {
   const state = {
     vesselName: document.getElementById('vesselName')?.value || '',
     gt: document.getElementById('gt')?.value || '',
+    imoMaster: document.getElementById('imoMaster')?.checked || false,
+    linesMaster: document.getElementById('linesMaster')?.checked || false,
     tugs
   };
 
@@ -113,7 +219,7 @@ function restoreTugsState() {
   if (!tugCards) return false;
 
   const state = getTugsState(isSailingTugsPage());
-  if (!state || !Array.isArray(state.tugs) || state.tugs.length === 0) return false;
+  if (!state || !Array.isArray(state.tugs)) return false;
 
   isRestoringTugs = true;
   tugCards.innerHTML = '';
@@ -145,6 +251,15 @@ function restoreTugsState() {
   if (vesselName) {
     vesselName.value = state.vesselName || '';
     updateVesselNameFromStorage(vesselName);
+  }
+
+  const imoMasterInput = document.getElementById('imoMaster');
+  if (imoMasterInput) {
+    imoMasterInput.checked = Boolean(state.imoMaster);
+  }
+  const linesMasterInput = document.getElementById('linesMaster');
+  if (linesMasterInput) {
+    linesMasterInput.checked = Boolean(state.linesMaster);
   }
 
   const gtInput = document.getElementById('gt');
@@ -188,6 +303,7 @@ function addOutlayRow(values = {}) {
   if (desc && desc.tagName === 'TEXTAREA') autoResizeTextarea(desc);
   wrapMoneyFields();
   recalcOutlayTotals();
+  saveIndexState();
 }
 
 function clearOutlayRow(row) {
@@ -196,6 +312,7 @@ function clearOutlayRow(row) {
     if (field.tagName === 'TEXTAREA') autoResizeTextarea(field);
   });
   recalcOutlayTotals();
+  saveIndexState();
 }
 
 function decorateOutlayRows() {
@@ -292,6 +409,7 @@ function updateTowageFromStorage() {
   }
   if (Number.isFinite(totalValue) || Number.isFinite(sailingTotalValue)) {
     recalcOutlayTotals();
+    saveIndexState();
   }
 }
 
@@ -433,6 +551,7 @@ function removeOutlayRow(row) {
 
   row.remove();
   recalcOutlayTotals();
+  saveIndexState();
 }
 
 function setSailingVisible(visible) {
@@ -604,10 +723,12 @@ function exportToExcel() {
 }
 
 function openTugsCalculator() {
+  saveIndexState();
   window.location.href = 'tugs-calculator.html';
 }
 
 function openTugsCalculatorSailing() {
+  saveIndexState();
   window.location.href = 'tugs-sailing-pda.html';
 }
 
@@ -649,6 +770,7 @@ function initIndex() {
   if (!outlaysBody) return;
 
   document.body.classList.add('density-comfortable');
+  restoreIndexState();
   decorateOutlayRows();
   recalcOutlayTotals();
   refreshOutlayLayout();
@@ -674,6 +796,7 @@ function initIndex() {
   outlaysBody.addEventListener('dragend', () => {
     if (draggingRow) draggingRow.classList.remove('dragging');
     draggingRow = null;
+    saveIndexState();
   });
 
   outlaysBody.addEventListener('dragover', (event) => {
@@ -705,6 +828,7 @@ function initIndex() {
     if (target.classList.contains('money') || target.classList.contains('percent-input')) {
       recalcOutlayTotals();
     }
+    saveIndexState();
   });
 
   outlaysTable = document.querySelector('.outlays-table');
@@ -713,6 +837,7 @@ function initIndex() {
   if (toggleSailing) {
     toggleSailing.addEventListener('change', () => {
       setSailingVisible(toggleSailing.checked);
+      saveIndexState();
     });
     setSailingVisible(toggleSailing.checked);
   }
@@ -721,6 +846,7 @@ function initIndex() {
     updateCurrencySymbol(outlaysCurrency.value);
     outlaysCurrency.addEventListener('change', () => {
       updateCurrencySymbol(outlaysCurrency.value);
+      saveIndexState();
     });
   }
 
@@ -731,6 +857,7 @@ function initIndex() {
       const value = vesselNameIndex.value.trim();
       if (value) safeStorageSet(STORAGE_KEYS.vesselName, value);
       else safeStorageRemove(STORAGE_KEYS.vesselName);
+      saveIndexState();
     });
   }
 
@@ -741,6 +868,7 @@ function initIndex() {
       const value = gtInputIndex.value.trim();
       if (value) safeStorageSet(STORAGE_KEYS.gt, value);
       else safeStorageRemove(STORAGE_KEYS.gt);
+      saveIndexState();
     });
   }
 
@@ -755,7 +883,10 @@ function initIndex() {
   const titleNote = document.getElementById('titleNote');
   if (titleNote) {
     autoSizeInput(titleNote);
-    titleNote.addEventListener('input', () => autoSizeInput(titleNote));
+    titleNote.addEventListener('input', () => {
+      autoSizeInput(titleNote);
+      saveIndexState();
+    });
   }
 
   const dateInput = document.getElementById('dateInput');
@@ -766,11 +897,24 @@ function initIndex() {
     const year = String(now.getFullYear()).slice(-2);
     dateInput.value = `${day}/${month}/${year}`;
   }
+  if (dateInput) {
+    dateInput.addEventListener('input', saveIndexState);
+  }
 
   densityComfortable = document.getElementById('densityComfortable');
   densityDense = document.getElementById('densityDense');
-  if (densityComfortable) densityComfortable.addEventListener('click', () => setDensity('comfortable'));
-  if (densityDense) densityDense.addEventListener('click', () => setDensity('dense'));
+  if (densityComfortable) {
+    densityComfortable.addEventListener('click', () => {
+      setDensity('comfortable');
+      saveIndexState();
+    });
+  }
+  if (densityDense) {
+    densityDense.addEventListener('click', () => {
+      setDensity('dense');
+      saveIndexState();
+    });
+  }
 
   updateTowageFromStorage();
   updateIndexGtFromStorage();
@@ -780,6 +924,9 @@ function initIndex() {
     updateIndexGtFromStorage();
     updateVesselNameFromStorage(vesselNameIndex);
   });
+
+  window.addEventListener('beforeunload', saveIndexState);
+  window.addEventListener('pagehide', saveIndexState);
 
   window.addEventListener('afterprint', clearPrintHidden);
 }
@@ -860,6 +1007,8 @@ function addTug() {
       <div class="tug-total" id="tugTotal_${tugCount}">Tug total: €0.00</div>
     </div>
   `);
+
+  if (isRestoringTugs) return;
 
   applyImoMaster();
   applyLinesMaster();
@@ -1205,9 +1354,9 @@ function initTugs() {
     }
   });
 
-  if (!restoreTugsState()) {
-    // start with no tugs; user adds manually
-  }
+  restoreTugsState();
+  window.addEventListener('beforeunload', saveTugsState);
+  window.addEventListener('pagehide', saveTugsState);
 }
 
 window.addEventListener('afterprint', () => {
