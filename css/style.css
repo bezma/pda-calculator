@@ -106,13 +106,13 @@ body {margin: 0;
       padding: 6px 8px;
       border-radius: 8px;
       border: 1px solid #e2e8f0;
-      font-size: 14px;
+      font-size: 16px;
       background: #f1f5f9;
       min-width: 60px;
     }
 
     body.page-index .hero .date{
-      font-size: 14px;
+      font-size: 16px;
       color: var(--muted);
       padding: 6px 12px;
       border-radius: 999px;
@@ -120,6 +120,7 @@ body {margin: 0;
       min-height: 36px;
       display: inline-flex;
       align-items: center;
+      gap: 8px;
     }
 
     body.page-index .date .date-input{
@@ -757,8 +758,44 @@ body {margin: 0;
       body.page-index .hero{ margin-bottom: 3px; }
       body.page-index .hero-center{ padding: 0; min-height: auto; background: none; border: none; border-radius: 0; }
       body.page-index .hero h1{ font-size: 16px; color: #111; }
-      body.page-index .title-note input{ padding: 3px 5px; font-size: 8.5px; border-radius: 0; }
-      body.page-index .date{ font-size: 8.5px; justify-self: end; padding: 0; min-height: auto; background: none; border: none; border-radius: 0; color: #111; }
+      body.page-index .title-note input{
+        padding: 0;
+        font-size: 12px;
+        font-weight: 400;
+        color: #111;
+        line-height: 1.2;
+        border: none;
+        background: none;
+        border-radius: 0;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      body.page-index .title-note input::placeholder{
+        color: #111;
+        opacity: 1;
+        font-size: 12px;
+      }
+      body.page-index .date{
+        font-size: 12px;
+        justify-self: end;
+        padding: 0;
+        min-height: auto;
+        background: none;
+        border: none;
+        border-radius: 0;
+        color: #111;
+        gap: 8px;
+      }
+      body.page-index .date .date-input{
+        font-size: 12px;
+        font-weight: 400;
+        color: #111;
+        padding: 0;
+        border: none;
+        background: none;
+        -webkit-appearance: none;
+        appearance: none;
+      }
       body.page-index textarea.cell-input{ min-height: 12px; }
 
       body.page-index .card-row .card{ padding: 6px 9px; }
