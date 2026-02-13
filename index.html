@@ -8,13 +8,17 @@
 </head>
 <body class="page-index">
   <div class="container">
-    <div class="logo">
-      <img src="images/logo.png" alt="Capris Croatia" />
+    <div class="logo-bar">
+      <textarea id="logoLeftNote" class="cell-input logo-left-note" rows="2" placeholder=""></textarea>
+      <div class="logo">
+        <img src="images/logo.png" alt="Capris Croatia" />
+      </div>
+      <div class="logo-bar-spacer" aria-hidden="true"></div>
     </div>
     <div class="hero">
       <div class="hero-spacer" aria-hidden="true"></div>
-      <div class="hero-center">
-        <h1>PRO-FORMA D/A</h1>
+      <div class="proforma-pill">
+        <span class="proforma-pill-title">PRO-FORMA D/A</span>
         <div class="title-note" data-print-hide-group>
           <input id="titleNote" class="cell-input" data-print-hide-empty value="" placeholder="Ref. No." />
         </div>
@@ -30,7 +34,7 @@
             <input id="vesselNameIndex" placeholder="e.g., MV King Bezma" />
           </div>
           <div>
-            <label>Gross Tonnage (GT)</label>
+            <label>Gross Tonnage <span class="print-hide-fragment">(GT)</span></label>
             <input id="grossTonnage" placeholder="24048" />
           </div>
           <div>
@@ -38,7 +42,7 @@
             <input id="lengthOverall" placeholder="182,86 m" />
           </div>
           <div>
-            <label>Bow Thruster Fitted</label>
+            <label>Bow Thruster <span class="print-hide-fragment">Fitted</span></label>
             <input id="bowThrusterFitted" placeholder="YES" />
           </div>
         </div>
@@ -83,16 +87,18 @@
     </div>
 
     <div class="card">
-      <div class="section-title">
-        Outlays & Charges Expressed In
-        <span class="section-currency">
-          <select id="outlaysCurrency">
-            <option value="EUR" selected>EUR</option>
-            <option value="USD">USD</option>
-            <option value="GBP">GBP</option>
+      <div class="outlays-heading-row">
+        <div class="section-title">
+          Outlays & Charges Expressed In
+          <span class="section-currency">
+            <select id="outlaysCurrency">
+              <option value="EUR" selected>EUR</option>
+              <option value="USD">USD</option>
+              <option value="GBP">GBP</option>
             <option value="HRK">HRK</option>
           </select>
         </span>
+        </div>
       </div>
       <div class="table-actions">
         <button class="mini" type="button" onclick="addOutlayRow()">+ Add Row</button>

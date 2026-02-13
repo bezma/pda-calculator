@@ -21,6 +21,7 @@ const STORAGE_KEYS = {
 };
 
 const INDEX_FIELD_IDS = [
+  'logoLeftNote',
   'titleNote',
   'dateInput',
   'vesselNameIndex',
@@ -889,6 +890,15 @@ function initIndex() {
     });
   }
 
+  const logoLeftNote = document.getElementById('logoLeftNote');
+  if (logoLeftNote) {
+    autoResizeTextarea(logoLeftNote);
+    logoLeftNote.addEventListener('input', () => {
+      autoResizeTextarea(logoLeftNote);
+      saveIndexState();
+    });
+  }
+
   const dateInput = document.getElementById('dateInput');
   if (dateInput && !dateInput.value) {
     const now = new Date();
@@ -1371,6 +1381,8 @@ window.addEventListener('afterprint', () => {
 });
 
 window.addEventListener('beforeprint', () => {
+  const logoLeftNote = document.getElementById('logoLeftNote');
+  if (logoLeftNote) autoResizeTextarea(logoLeftNote);
   applyPrintDensity();
   updatePrintHidden();
 });

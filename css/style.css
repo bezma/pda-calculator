@@ -49,10 +49,29 @@ body {margin: 0;
       margin: 0 auto;
     }
 
+    body.page-index .logo-bar{
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr);
+      align-items: start;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    body.page-index .logo-left-note{
+      max-width: 420px;
+      min-height: 56px;
+      resize: vertical;
+      line-height: 1.3;
+    }
+
     body.page-index .logo{
       display: none;
       justify-content: center;
-      margin-bottom: 14px;
+      margin-bottom: 0;
+    }
+
+    body.page-index .logo-bar-spacer{
+      display: none;
     }
 
     body.page-index .logo img{
@@ -63,10 +82,14 @@ body {margin: 0;
 
     body.page-index .hero{
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: 1fr auto 1fr;
       align-items: center;
       gap: 14px;
       margin-bottom: 24px;
+    }
+
+    body.page-index .hero-spacer{
+      grid-column: 1;
     }
 
     body.page-index .hero-center{
@@ -121,6 +144,8 @@ body {margin: 0;
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      grid-column: 3;
+      justify-self: end;
     }
 
     body.page-index .date .date-input{
@@ -214,6 +239,18 @@ body {margin: 0;
       }
       body.page-index .inline-form label{
         margin-bottom: 4px;
+      }
+      body.page-index .outlays-heading-row{
+        grid-template-columns: 1fr;
+      }
+      body.page-index .outlays-heading-row .section-title{
+        justify-self: start;
+      }
+      body.page-index .proforma-pill{
+        justify-self: center;
+      }
+      body.page-index .outlays-heading-spacer{
+        display: none;
       }
     }
 
@@ -579,6 +616,49 @@ body {margin: 0;
       margin-bottom: 10px;
     }
 
+    body.page-index .outlays-heading-row{
+      display: grid;
+      grid-template-columns: 1fr 420px 1fr;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    body.page-index .outlays-heading-row .section-title{
+      margin: 0;
+      justify-self: start;
+      white-space: nowrap;
+    }
+
+    body.page-index .proforma-pill{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      justify-self: center;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: var(--muted);
+      min-height: 29px;
+      width: auto;
+      max-width: 100%;
+      grid-column: 2;
+    }
+
+    body.page-index .proforma-pill-title{
+      font-size: 14px;
+      letter-spacing: -0.02em;
+      font-weight: 700;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    body.page-index .proforma-pill .title-note input{
+      font-size: 13px;
+      padding: 5px 6px;
+    }
+
     body.page-index .sailing-toggle{
       display: inline-flex;
       align-items: center;
@@ -700,10 +780,9 @@ body {margin: 0;
         grid-template-columns: 1fr auto 1fr;
         align-items: center;
       }
-      body.page-index .hero::before{
-        content: "";
-        grid-column: 1;
-      }
+      body.page-index .hero::before{ content: none; }
+      body.page-index .hero-spacer{ grid-column: 1; }
+      body.page-index .proforma-pill{ grid-column: 2; }
       body.page-index .hero-center{
         grid-column: 2;
         justify-self: center;
@@ -718,8 +797,24 @@ body {margin: 0;
       body.page-index .row-handle{ display: none; }
       body.page-index .row-edit{ display: none; }
       body.page-index .row-remove{ display: none; }
-      body.page-index .logo{ display: flex; justify-content: flex-start; margin-bottom: 4px; }
-      body.page-index .logo img{ height: 50px; }
+      body.page-index .logo-bar{
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      body.page-index .logo-left-note{
+        grid-column: 1;
+        justify-self: start;
+        width: 100%;
+        max-width: 320px;
+        min-height: 56px;
+        overflow: hidden;
+        resize: none;
+      }
+      body.page-index .logo{ display: flex; grid-column: 2; justify-content: center; margin-bottom: 0; }
+      body.page-index .logo-bar-spacer{ display: block; grid-column: 3; }
+      body.page-index .logo img{ height: 63px; }
       body.page-index .print-hide{ display: none !important; }
       body.page-index .options-card{ display: none; }
       body.page-index{ background: white; padding: 0; }
@@ -755,6 +850,35 @@ body {margin: 0;
       body.page-index table{ min-width: 0; }
       body.page-index .table-wrap{ transform: none; border-color: #c0c0c0; border-radius: 0; background: #fff; }
       body.page-index .section-title{ margin: 1px 0 3px; font-size: 8.5px; text-transform: none; letter-spacing: 0; font-weight: 700; color: #111; }
+      body.page-index .outlays-heading-row{
+        grid-template-columns: 1fr auto 1fr;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      body.page-index .outlays-heading-row .section-title{
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+      body.page-index .outlays-heading-row .section-currency select{
+        font-size: 12px;
+      }
+      body.page-index .proforma-pill{
+        padding: 0;
+        min-height: auto;
+        background: none;
+        border: none;
+        border-radius: 0;
+        gap: 6px;
+      }
+      body.page-index .proforma-pill-title{
+        font-size: 12px;
+        color: #111;
+      }
+      body.page-index .outlays-heading-spacer{
+        display: block;
+      }
       body.page-index .hero{ margin-bottom: 3px; }
       body.page-index .hero-center{ padding: 0; min-height: auto; background: none; border: none; border-radius: 0; }
       body.page-index .hero h1{ font-size: 16px; color: #111; }
@@ -795,6 +919,9 @@ body {margin: 0;
         background: none;
         -webkit-appearance: none;
         appearance: none;
+      }
+      body.page-index .print-hide-fragment{
+        display: none;
       }
       body.page-index textarea.cell-input{ min-height: 12px; }
 
