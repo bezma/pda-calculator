@@ -725,7 +725,7 @@ function exportToExcel() {
 
 function openTugsCalculator() {
   saveIndexState();
-  window.location.href = 'tugs-calculator.html';
+  window.location.href = 'tugs-pda.html';
 }
 
 function openTugsCalculatorSailing() {
