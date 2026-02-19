@@ -1098,6 +1098,53 @@ body {margin: 0;
       gap: 12px;
     }
 
+    body.page-tugs .light-dues-wrap{
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid var(--table-border);
+      background: #f8fafc;
+    }
+
+    body.page-tugs .light-dues-table{
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 520px;
+      background: #fff;
+      font-size: 14px;
+    }
+
+    body.page-tugs .light-dues-table th,
+    body.page-tugs .light-dues-table td{
+      border: 1px solid var(--table-border);
+      padding: 8px 10px;
+      vertical-align: middle;
+    }
+
+    body.page-tugs .light-dues-table th{
+      background: var(--table-blue);
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      color: #0b1220;
+    }
+
+    body.page-tugs .light-dues-readonly{
+      width: 100%;
+      margin-top: 0;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    body.page-tugs .light-dues-controls{
+      grid-template-columns: minmax(260px, 420px);
+      gap: 10px;
+    }
+
+    body.page-tugs label.checkbox.light-dues-period{
+      margin-top: 0;
+      font-weight: 600;
+    }
+
     body.page-tugs .section-title{
       margin-top: 14px;
       font-size: 12px;

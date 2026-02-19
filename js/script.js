@@ -18,7 +18,13 @@ const STORAGE_KEYS = {
   towageTotalSailing: 'pda_towage_total_sailing',
   towageArrivalCountSailing: 'pda_towage_arrival_count_sailing',
   towageDepartureCountSailing: 'pda_towage_departure_count_sailing',
-  tugsStateSailing: 'pda_tugs_state_sailing'
+  tugsStateSailing: 'pda_tugs_state_sailing',
+  lightDuesState: 'pda_light_dues_state',
+  lightDuesStateSailing: 'pda_light_dues_state_sailing',
+  lightDuesAmountPda: 'pda_light_dues_amount_pda',
+  lightDuesTariffPda: 'pda_light_dues_tariff_pda',
+  lightDuesAmountSailing: 'pda_light_dues_amount_sailing',
+  lightDuesTariffSailing: 'pda_light_dues_tariff_sailing'
 };
 
 const INDEX_FIELD_IDS = [
@@ -53,6 +59,161 @@ const TUG_STORAGE = {
     towageDepartureCount: STORAGE_KEYS.towageDepartureCountSailing,
     tugsState: STORAGE_KEYS.tugsStateSailing
   }
+};
+
+const LIGHT_DUES_TARIFFS = {
+  cargo: {
+    rate30: 0.5088,
+    rate12: 1.696,
+    label30: '0,5088',
+    label12: '1,696'
+  },
+  tanker: {
+    rate30: 0.579768,
+    rate12: 1.940448,
+    label30: '0,579768',
+    label12: '1,940448'
+  },
+  roroCargo: {
+    rate30: 0.2,
+    rate12: 0.664,
+    label30: '0,2',
+    label12: '0,664'
+  },
+  passengerRoroFerry: {
+    rate30: 0.2014,
+    rate12: 0.6784,
+    label30: '0,2014',
+    label12: '0,6784'
+  },
+  supply: {
+    rate30: 0.5088,
+    rate12: 1.696,
+    label30: '0,5088',
+    label12: '1,696'
+  },
+  tugboatPusher: {
+    rate30: 0.1325,
+    rate12: 0.4399,
+    label30: '0,1325',
+    label12: '0,4399'
+  },
+  fishing: {
+    rate30: 0.2014,
+    rate12: 0.6784,
+    label30: '0,2014',
+    label12: '0,6784'
+  },
+  technicalCraft: {
+    rate30: 0.2014,
+    rate12: 0.6784,
+    label30: '0,2014',
+    label12: '0,6784'
+  },
+  nonSelfPropelled: {
+    rate30: 0.2014,
+    rate12: 0.6784,
+    label30: '0,2014',
+    label12: '0,6784'
+  },
+  otherUnidentified: {
+    rate30: 0.5088,
+    rate12: 1.696,
+    label30: '0,5088',
+    label12: '1,696'
+  },
+  bulk: {
+    le30000: {
+      rate30: 0.45792,
+      rate12: 1.5264,
+      label30: '0,45792',
+      label12: '1,5264'
+    },
+    '30001to50000': {
+      rate30: 0.4028,
+      rate12: 1.378,
+      label30: '0,4028',
+      label12: '1,378'
+    },
+    gt50000: {
+      rate30: 0.2968,
+      rate12: 0.8904,
+      label30: '0,2968',
+      label12: '0,8904'
+    }
+  },
+  container: {
+    le40000: {
+      rate30: 0.2332,
+      rate12: 1.06,
+      label30: '0,2332',
+      label12: '1,06'
+    },
+    '40001to65000': {
+      rate30: 0.10388,
+      rate12: 0.34238,
+      label30: '0,10388',
+      label12: '0,34238'
+    },
+    '65001to100000': {
+      rate30: 0.0742,
+      rate12: 0.2862,
+      label30: '0,0742',
+      label12: '0,2862'
+    },
+    gt100000: {
+      rate30: 0.053,
+      rate12: 0.1908,
+      label30: '0,053',
+      label12: '0,1908'
+    }
+  },
+  cruise: {
+    le20000: {
+      rate30: 0.25,
+      rate12: 0.875,
+      label30: '0,25',
+      label12: '0,875'
+    },
+    '20001to50000': {
+      rate30: 0.20125,
+      rate12: 0.6875,
+      label30: '0,20125',
+      label12: '0,6875'
+    },
+    '50001to80000': {
+      rate30: 0.1725,
+      rate12: 0.575,
+      label30: '0,1725',
+      label12: '0,575'
+    },
+    gt80000: {
+      rate30: 0.17125,
+      rate12: 0.5,
+      label30: '0,17125',
+      label12: '0,5'
+    }
+  }
+};
+
+const LIGHT_DUES_TIER_OPTIONS = {
+  bulk: [
+    { value: 'le30000', label: 'if ≤ 30.000 GT', max: 30000 },
+    { value: '30001to50000', label: 'if 30.001 - 50.000 GT', min: 30001, max: 50000 },
+    { value: 'gt50000', label: 'if > 50.000 GT', min: 50001 }
+  ],
+  container: [
+    { value: 'le40000', label: 'if ≤ 40.000 GT', max: 40000 },
+    { value: '40001to65000', label: 'if 40.001 - 65.000 GT', min: 40001, max: 65000 },
+    { value: '65001to100000', label: 'if 65.001 - 100.000 GT', min: 65001, max: 100000 },
+    { value: 'gt100000', label: 'if > 100.000 GT', min: 100001 }
+  ],
+  cruise: [
+    { value: 'le20000', label: 'if ≤ 20.000 GT', max: 20000 },
+    { value: '20001to50000', label: 'if 20.001 - 50.000 GT', min: 20001, max: 50000 },
+    { value: '50001to80000', label: 'if 50.001 - 80.000 GT', min: 50001, max: 80000 },
+    { value: 'gt80000', label: 'if > 80.000 GT', min: 80001 }
+  ]
 };
 
 function safeStorageGet(key) {
@@ -423,6 +584,60 @@ function updateTowageFromStorage() {
   }
 }
 
+function findLightDuesRow() {
+  const tbody = document.getElementById('outlaysBody');
+  if (!tbody) return null;
+  return Array.from(tbody.querySelectorAll('tr')).find((row) => {
+    const descField = row.querySelector('td.desc textarea, td.desc input');
+    const desc = String(descField?.value || '').trim().toUpperCase();
+    return desc.startsWith('LIGHT DUES');
+  }) || null;
+}
+
+function updateLightDuesFromStorage() {
+  const lightDuesRow = findLightDuesRow();
+  if (!lightDuesRow) return;
+
+  let changed = false;
+  const descInput = lightDuesRow.querySelector('td.desc textarea, td.desc input');
+  const tariffPda = safeStorageGet(STORAGE_KEYS.lightDuesTariffPda);
+  if (tariffPda && descInput) {
+    const nextDesc = `LIGHT DUES (EUR ${tariffPda} x vsl's GRT)`;
+    if (descInput.value !== nextDesc) {
+      descInput.value = nextDesc;
+      if (descInput.tagName === 'TEXTAREA') autoResizeTextarea(descInput);
+      changed = true;
+    }
+  }
+
+  const pdaInput = lightDuesRow.querySelector('td:nth-child(2) input.cell-input.money');
+  const pdaAmountRaw = Number(safeStorageGet(STORAGE_KEYS.lightDuesAmountPda));
+  if (pdaInput && Number.isFinite(pdaAmountRaw)) {
+    const formatted = formatMoneyValue(pdaAmountRaw);
+    if (pdaInput.value !== formatted) {
+      pdaInput.value = formatted;
+      if (isPdaRoundingEnabled()) pdaInput.dataset.rawValue = formatted;
+      else delete pdaInput.dataset.rawValue;
+      changed = true;
+    }
+  }
+
+  const sailingInput = lightDuesRow.querySelector('td:nth-child(3) input.cell-input.money');
+  const sailingAmountRaw = Number(safeStorageGet(STORAGE_KEYS.lightDuesAmountSailing));
+  if (sailingInput && Number.isFinite(sailingAmountRaw)) {
+    const formatted = formatMoneyValue(sailingAmountRaw);
+    if (sailingInput.value !== formatted) {
+      sailingInput.value = formatted;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    recalcOutlayTotals();
+    saveIndexState();
+  }
+}
+
 function updateIndexGtFromStorage() {
   const gtInputIndex = document.getElementById('grossTonnage');
   if (!gtInputIndex) return;
@@ -535,12 +750,16 @@ function focusMoneyFromEdit(button) {
   if (typeof input.select === 'function') input.select();
 }
 
-function shouldShowInlineMoneyEdit(row) {
+function getOutlayDescription(row) {
   const descField = row.querySelector('td.desc textarea, td.desc input');
-  const desc = String(descField?.value || '')
+  return String(descField?.value || '')
     .trim()
     .replace(/\s+/g, ' ')
     .toUpperCase();
+}
+
+function shouldShowInlineMoneyEdit(row) {
+  const desc = getOutlayDescription(row);
   const editablePrefixes = [
     'LIGHT DUES',
     'PORT DUES',
@@ -554,12 +773,29 @@ function shouldShowInlineMoneyEdit(row) {
 function removeInlineMoneyEdit(cell) {
   const wrapper = cell.querySelector('.money-edit');
   if (!wrapper) return;
-  const button = wrapper.querySelector('.row-edit');
-  const isFocusEdit = button && button.getAttribute('onclick') === 'focusMoneyFromEdit(this)';
-  if (!isFocusEdit) return;
   const moneyField = wrapper.querySelector('.money-field');
   if (!moneyField) return;
   wrapper.replaceWith(moneyField);
+}
+
+function getInlineMoneyEditConfig(row, columnIndex) {
+  const desc = getOutlayDescription(row);
+  if (desc.startsWith('LIGHT DUES')) {
+    if (columnIndex === 2) {
+      return {
+        onClick: 'openLightDuesPda()',
+        ariaLabel: 'Edit light dues PDA'
+      };
+    }
+    return {
+      onClick: 'openLightDuesSailingPda()',
+      ariaLabel: 'Edit light dues sailing PDA'
+    };
+  }
+  return {
+    onClick: 'focusMoneyFromEdit(this)',
+    ariaLabel: columnIndex === 2 ? 'Edit PDA amount' : 'Edit Sailing PDA amount'
+  };
 }
 
 function decorateMoneyEditCells() {
@@ -579,7 +815,13 @@ function decorateMoneyEditCells() {
         return;
       }
 
-      if (cell.querySelector('.row-edit')) return;
+      let button = cell.querySelector('.row-edit');
+      if (button) {
+        const config = getInlineMoneyEditConfig(row, columnIndex);
+        button.setAttribute('aria-label', config.ariaLabel);
+        button.setAttribute('onclick', config.onClick);
+        return;
+      }
 
       const moneyField = cell.querySelector('.money-field');
       if (!moneyField) return;
@@ -587,11 +829,12 @@ function decorateMoneyEditCells() {
       const wrapper = document.createElement('div');
       wrapper.className = 'money-edit';
 
-      const button = document.createElement('button');
+      button = document.createElement('button');
       button.type = 'button';
       button.className = 'row-edit money-edit-btn';
-      button.setAttribute('aria-label', columnIndex === 2 ? 'Edit PDA amount' : 'Edit Sailing PDA amount');
-      button.setAttribute('onclick', 'focusMoneyFromEdit(this)');
+      const config = getInlineMoneyEditConfig(row, columnIndex);
+      button.setAttribute('aria-label', config.ariaLabel);
+      button.setAttribute('onclick', config.onClick);
 
       const icon = document.createElement('img');
       icon.src = 'assets/icons/edit_48x48.png';
@@ -855,6 +1098,28 @@ function openTugsCalculatorSailing() {
   window.location.href = 'tugs-sailing-pda.html';
 }
 
+function openLightDuesPda() {
+  saveIndexState();
+  const gtInputIndex = document.getElementById('grossTonnage');
+  if (gtInputIndex) {
+    const gtValue = gtInputIndex.value.trim();
+    if (gtValue) safeStorageSet(STORAGE_KEYS.gt, gtValue);
+    else safeStorageRemove(STORAGE_KEYS.gt);
+  }
+  window.location.href = 'light-dues-pda.html';
+}
+
+function openLightDuesSailingPda() {
+  saveIndexState();
+  const gtInputIndex = document.getElementById('grossTonnage');
+  if (gtInputIndex) {
+    const gtValue = gtInputIndex.value.trim();
+    if (gtValue) safeStorageSet(STORAGE_KEYS.gt, gtValue);
+    else safeStorageRemove(STORAGE_KEYS.gt);
+  }
+  window.location.href = 'light-dues-sailing-pda.html';
+}
+
 function goHome() {
   saveTugsState();
   window.location.href = 'index.html';
@@ -1064,10 +1329,15 @@ function initIndex() {
   }
 
   updateTowageFromStorage();
+  updateLightDuesFromStorage();
   updateIndexGtFromStorage();
-  window.addEventListener('pageshow', updateTowageFromStorage);
+  window.addEventListener('pageshow', () => {
+    updateTowageFromStorage();
+    updateLightDuesFromStorage();
+  });
   window.addEventListener('storage', () => {
     updateTowageFromStorage();
+    updateLightDuesFromStorage();
     updateIndexGtFromStorage();
     updateVesselNameFromStorage(vesselNameIndex);
   });
@@ -1076,6 +1346,240 @@ function initIndex() {
   window.addEventListener('pagehide', saveIndexState);
 
   window.addEventListener('afterprint', clearPrintHidden);
+}
+
+function isLightDuesPdaPage() {
+  return Boolean(document.body && document.body.classList.contains('page-light-dues-pda'));
+}
+
+function isLightDuesSailingPage() {
+  return Boolean(document.body && document.body.classList.contains('page-light-dues-sailing'));
+}
+
+function getLightDuesStateKey() {
+  if (isLightDuesSailingPage()) return STORAGE_KEYS.lightDuesStateSailing;
+  if (isLightDuesPdaPage()) return STORAGE_KEYS.lightDuesState;
+  return null;
+}
+
+function getTierBandFromGt(type, gt) {
+  const tierOptions = LIGHT_DUES_TIER_OPTIONS[type];
+  if (!Array.isArray(tierOptions) || tierOptions.length === 0) return '';
+  if (!Number.isFinite(gt) || gt <= 0) return tierOptions[0].value;
+
+  const matching = tierOptions.find((option) => {
+    const minOk = option.min === undefined || gt >= option.min;
+    const maxOk = option.max === undefined || gt <= option.max;
+    return minOk && maxOk;
+  });
+  return matching ? matching.value : tierOptions[tierOptions.length - 1].value;
+}
+
+function rebuildTierOptions(typeInput, tierBandInput, preferredBand, gt) {
+  if (!typeInput || !tierBandInput) return;
+  const options = LIGHT_DUES_TIER_OPTIONS[typeInput.value] || [];
+  tierBandInput.innerHTML = '';
+  options.forEach((option) => {
+    const node = document.createElement('option');
+    node.value = option.value;
+    node.textContent = option.label;
+    tierBandInput.appendChild(node);
+  });
+  if (options.length === 0) return;
+
+  const hasPreferred = preferredBand && options.some((option) => option.value === preferredBand);
+  tierBandInput.value = hasPreferred ? preferredBand : getTierBandFromGt(typeInput.value, gt);
+}
+
+function getLightDuesTariff(type, tierBand, gt) {
+  const tierOptions = LIGHT_DUES_TIER_OPTIONS[type];
+  if (Array.isArray(tierOptions) && tierOptions.length > 0) {
+    const resolvedBand = tierBand || getTierBandFromGt(type, gt);
+    return LIGHT_DUES_TARIFFS[type][resolvedBand] || LIGHT_DUES_TARIFFS[type][tierOptions[0].value];
+  }
+  return LIGHT_DUES_TARIFFS[type] || LIGHT_DUES_TARIFFS.cargo;
+}
+
+function setTierVisibility(typeInput, tierWrap) {
+  if (!typeInput || !tierWrap) return;
+  const hasTierOptions = Boolean(LIGHT_DUES_TIER_OPTIONS[typeInput.value]);
+  tierWrap.style.display = hasTierOptions ? '' : 'none';
+}
+
+function saveLightDuesState() {
+  const stateKey = getLightDuesStateKey();
+  if (!stateKey) return;
+  const typeInput = document.getElementById('lightDuesType');
+  const tierBandInput = document.getElementById('lightDuesTierBand');
+  const gtInput = document.getElementById('lightDuesGt');
+  const period30Input = document.getElementById('lightDuesPeriod30');
+  const period12Input = document.getElementById('lightDuesPeriod12');
+  if (!typeInput || !tierBandInput || !gtInput || !period30Input || !period12Input) return;
+
+  const state = {
+    type: typeInput.value,
+    tierBand: tierBandInput.value,
+    gt: gtInput.value,
+    period30: Boolean(period30Input.checked),
+    period12: Boolean(period12Input.checked)
+  };
+  safeStorageSet(stateKey, JSON.stringify(state));
+}
+
+function restoreLightDuesState(typeInput, tierBandInput, gtInput, period30Input, period12Input) {
+  const stateKey = getLightDuesStateKey();
+  let preferredTierBand = '';
+
+  if (stateKey) {
+    const raw = safeStorageGet(stateKey);
+    if (raw) {
+      let state = null;
+      try {
+        state = JSON.parse(raw);
+      } catch (error) {
+        state = null;
+      }
+      if (state && typeof state === 'object') {
+        if (typeof state.type === 'string' && state.type) typeInput.value = state.type;
+        if (typeof state.gt === 'string') gtInput.value = state.gt;
+        preferredTierBand = state.tierBand || state.bulkBand || '';
+        if (typeof state.period30 === 'boolean') period30Input.checked = state.period30;
+        if (typeof state.period12 === 'boolean') period12Input.checked = state.period12;
+      }
+    }
+  }
+
+  const sharedGt = safeStorageGet(STORAGE_KEYS.gt);
+  if (sharedGt !== null) {
+    gtInput.value = sharedGt;
+  }
+
+  if (!period30Input.checked && !period12Input.checked) {
+    period30Input.checked = true;
+  }
+  if (period30Input.checked && period12Input.checked) {
+    period12Input.checked = false;
+  }
+  rebuildTierOptions(typeInput, tierBandInput, preferredTierBand, Number(gtInput.value));
+}
+
+function enforceSingleLightDuesPeriod(changedInput, otherInput) {
+  if (!changedInput || !otherInput) return;
+  if (changedInput.checked) {
+    otherInput.checked = false;
+    return;
+  }
+  if (!otherInput.checked) {
+    changedInput.checked = true;
+  }
+}
+
+function calculateLightDues() {
+  const typeInput = document.getElementById('lightDuesType');
+  const tierBandInput = document.getElementById('lightDuesTierBand');
+  const gtInput = document.getElementById('lightDuesGt');
+  const period30Input = document.getElementById('lightDuesPeriod30');
+  const period12Input = document.getElementById('lightDuesPeriod12');
+  const tariff30 = document.getElementById('lightDuesTariff30');
+  const tariff12 = document.getElementById('lightDuesTariff12');
+  const amount30 = document.getElementById('lightDuesAmount30');
+  const amount12 = document.getElementById('lightDuesAmount12');
+
+  if (
+    !typeInput || !tierBandInput || !gtInput || !period30Input || !period12Input ||
+    !tariff30 || !tariff12 || !amount30 || !amount12
+  ) return;
+
+  if (!period30Input.checked && !period12Input.checked) {
+    period30Input.checked = true;
+  }
+  if (period30Input.checked && period12Input.checked) {
+    period12Input.checked = false;
+  }
+
+  const gt = Number(gtInput.value);
+  const tariff = getLightDuesTariff(typeInput.value, tierBandInput.value, gt);
+  tariff30.value = tariff.label30;
+  tariff12.value = tariff.label12;
+
+  const selectedPeriod = period12Input.checked ? '12' : '30';
+  const selectedTariffLabel = selectedPeriod === '12' ? tariff.label12 : tariff.label30;
+  const amountKey = isLightDuesSailingPage() ? STORAGE_KEYS.lightDuesAmountSailing : STORAGE_KEYS.lightDuesAmountPda;
+  const tariffKey = isLightDuesSailingPage() ? STORAGE_KEYS.lightDuesTariffSailing : STORAGE_KEYS.lightDuesTariffPda;
+
+  safeStorageSet(tariffKey, selectedTariffLabel);
+
+  if (!Number.isFinite(gt) || gt <= 0) {
+    amount30.value = '';
+    amount12.value = '';
+    safeStorageRemove(amountKey);
+    saveLightDuesState();
+    return;
+  }
+
+  const calculated30 = gt * tariff.rate30;
+  const calculated12 = gt * tariff.rate12;
+  amount30.value = formatMoneyValue(calculated30);
+  amount12.value = formatMoneyValue(calculated12);
+
+  const selectedAmount = selectedPeriod === '12' ? calculated12 : calculated30;
+  safeStorageSet(amountKey, selectedAmount.toFixed(2));
+  saveLightDuesState();
+}
+
+function initLightDues() {
+  const typeInput = document.getElementById('lightDuesType');
+  const tierBandInput = document.getElementById('lightDuesTierBand');
+  const tierWrap = document.getElementById('lightDuesTierWrap');
+  const gtInput = document.getElementById('lightDuesGt');
+  const period30Input = document.getElementById('lightDuesPeriod30');
+  const period12Input = document.getElementById('lightDuesPeriod12');
+  if (!typeInput || !tierBandInput || !tierWrap || !gtInput || !period30Input || !period12Input) return;
+
+  restoreLightDuesState(typeInput, tierBandInput, gtInput, period30Input, period12Input);
+  setTierVisibility(typeInput, tierWrap);
+  calculateLightDues();
+
+  typeInput.addEventListener('change', () => {
+    rebuildTierOptions(typeInput, tierBandInput, '', Number(gtInput.value));
+    setTierVisibility(typeInput, tierWrap);
+    calculateLightDues();
+  });
+
+  tierBandInput.addEventListener('change', calculateLightDues);
+
+  period30Input.addEventListener('change', () => {
+    enforceSingleLightDuesPeriod(period30Input, period12Input);
+    calculateLightDues();
+  });
+
+  period12Input.addEventListener('change', () => {
+    enforceSingleLightDuesPeriod(period12Input, period30Input);
+    calculateLightDues();
+  });
+
+  gtInput.addEventListener('input', () => {
+    const raw = gtInput.value.trim();
+    if (raw) safeStorageSet(STORAGE_KEYS.gt, raw);
+    else safeStorageRemove(STORAGE_KEYS.gt);
+
+    if (LIGHT_DUES_TIER_OPTIONS[typeInput.value]) {
+      rebuildTierOptions(typeInput, tierBandInput, '', Number(gtInput.value));
+    }
+    calculateLightDues();
+  });
+
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STORAGE_KEYS.gt) return;
+    const newGt = safeStorageGet(STORAGE_KEYS.gt) || '';
+    if (gtInput.value !== newGt) {
+      gtInput.value = newGt;
+      if (LIGHT_DUES_TIER_OPTIONS[typeInput.value]) {
+        rebuildTierOptions(typeInput, tierBandInput, '', Number(gtInput.value));
+      }
+      calculateLightDues();
+    }
+  });
 }
 
 // Tug calculator logic
@@ -1526,5 +2030,6 @@ window.addEventListener('beforeprint', () => {
 
 window.addEventListener('DOMContentLoaded', () => {
   initIndex();
+  initLightDues();
   initTugs();
 });
