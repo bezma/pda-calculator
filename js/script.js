@@ -6,6 +6,7 @@ let densityComfortable = null;
 let densityDense = null;
 let printRestoreDensity = null;
 let outlaysCurrency = null;
+let roundPdaPrices = null;
 const STORAGE_KEYS = {
   vesselName: 'pda_vessel_name',
   gt: 'pda_gt',
@@ -34,6 +35,7 @@ const INDEX_FIELD_IDS = [
   'cargoInput',
   'quantityInput',
   'toggleSailing',
+  'roundPdaPrices',
   'outlaysCurrency',
   'bankRate'
 ];
@@ -303,6 +305,7 @@ function addOutlayRow(values = {}) {
   }
   if (desc && desc.tagName === 'TEXTAREA') autoResizeTextarea(desc);
   wrapMoneyFields();
+  decorateMoneyEditCells();
   recalcOutlayTotals();
   saveIndexState();
 }
@@ -402,7 +405,13 @@ function updateTowageFromStorage() {
   const sailingInput = towageRow.querySelector('td:nth-child(3) input');
 
   if (Number.isFinite(totalValue) && pdaInput) {
-    pdaInput.value = formatMoneyValue(totalValue);
+    const formattedTowage = formatMoneyValue(totalValue);
+    pdaInput.value = formattedTowage;
+    if (isPdaRoundingEnabled()) {
+      pdaInput.dataset.rawValue = formattedTowage;
+    } else {
+      delete pdaInput.dataset.rawValue;
+    }
   }
   const sailingTotalValue = Number(sailingTotalRaw);
   if (Number.isFinite(sailingTotalValue) && sailingInput) {
@@ -500,9 +509,107 @@ function wrapMoneyFields() {
   });
 }
 
+function isPdaRoundingEnabled() {
+  return Boolean(roundPdaPrices && roundPdaPrices.checked);
+}
+
+function isPdaMoneyInput(input) {
+  if (!input) return false;
+  const cell = input.closest('td');
+  return Boolean(cell && cell.cellIndex === 1);
+}
+
+function getRawOrCurrentPdaValue(input) {
+  if (!input) return 0;
+  const source = input.dataset.rawValue !== undefined ? input.dataset.rawValue : input.value;
+  return parseMoneyValue(source);
+}
+
+function focusMoneyFromEdit(button) {
+  if (!button) return;
+  const cell = button.closest('td');
+  if (!cell) return;
+  const input = cell.querySelector('input.cell-input.money');
+  if (!input) return;
+  input.focus();
+  if (typeof input.select === 'function') input.select();
+}
+
+function shouldShowInlineMoneyEdit(row) {
+  const descField = row.querySelector('td.desc textarea, td.desc input');
+  const desc = String(descField?.value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+  const editablePrefixes = [
+    'LIGHT DUES',
+    'PORT DUES',
+    'PILOTAGE',
+    'PILOT BOAT',
+    'MOORING/UNMOORING'
+  ];
+  return editablePrefixes.some((prefix) => desc.startsWith(prefix));
+}
+
+function removeInlineMoneyEdit(cell) {
+  const wrapper = cell.querySelector('.money-edit');
+  if (!wrapper) return;
+  const button = wrapper.querySelector('.row-edit');
+  const isFocusEdit = button && button.getAttribute('onclick') === 'focusMoneyFromEdit(this)';
+  if (!isFocusEdit) return;
+  const moneyField = wrapper.querySelector('.money-field');
+  if (!moneyField) return;
+  wrapper.replaceWith(moneyField);
+}
+
+function decorateMoneyEditCells() {
+  const tbody = document.getElementById('outlaysBody');
+  if (!tbody) return;
+
+  tbody.querySelectorAll('tr').forEach((row) => {
+    if (row.dataset.row === 'towage' || row.dataset.row === 'bank-charges') return;
+    const shouldShowEdit = shouldShowInlineMoneyEdit(row);
+
+    [2, 3].forEach((columnIndex) => {
+      const cell = row.querySelector(`td:nth-child(${columnIndex})`);
+      if (!cell) return;
+
+      if (!shouldShowEdit) {
+        removeInlineMoneyEdit(cell);
+        return;
+      }
+
+      if (cell.querySelector('.row-edit')) return;
+
+      const moneyField = cell.querySelector('.money-field');
+      if (!moneyField) return;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'money-edit';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'row-edit money-edit-btn';
+      button.setAttribute('aria-label', columnIndex === 2 ? 'Edit PDA amount' : 'Edit Sailing PDA amount');
+      button.setAttribute('onclick', 'focusMoneyFromEdit(this)');
+
+      const icon = document.createElement('img');
+      icon.src = 'assets/icons/edit_48x48.png';
+      icon.alt = '';
+      button.appendChild(icon);
+
+      moneyField.remove();
+      wrapper.appendChild(button);
+      wrapper.appendChild(moneyField);
+      cell.appendChild(wrapper);
+    });
+  });
+}
+
 function recalcOutlayTotals() {
   const tbody = document.getElementById('outlaysBody');
   if (!tbody) return;
+  const roundPda = isPdaRoundingEnabled();
 
   let totalPda = 0;
   let totalSailing = 0;
@@ -514,7 +621,8 @@ function recalcOutlayTotals() {
 
   tbody.querySelectorAll('tr').forEach((row) => {
     if (row === bankRow) {
-      const bankPda = runningPda * bankRate;
+      const bankPdaRaw = runningPda * bankRate;
+      const bankPda = roundPda ? Math.ceil(bankPdaRaw) : bankPdaRaw;
       const bankSailing = runningSailing * bankRate;
       const bankPdaInput = document.getElementById('bankPda');
       const bankSailingInput = document.getElementById('bankSailing');
@@ -526,7 +634,21 @@ function recalcOutlayTotals() {
     }
 
     const inputs = row.querySelectorAll('input.cell-input.money');
-    const pdaValue = inputs.length >= 1 ? parseMoneyValue(inputs[0].value) : 0;
+    const pdaInput = inputs.length >= 1 ? inputs[0] : null;
+    let pdaValue = pdaInput ? getRawOrCurrentPdaValue(pdaInput) : 0;
+    if (roundPda) {
+      if (pdaInput && !pdaInput.readOnly && pdaInput.dataset.rawValue === undefined) {
+        pdaInput.dataset.rawValue = pdaInput.value;
+      }
+      pdaValue = Math.ceil(pdaValue);
+      if (pdaInput && !pdaInput.readOnly) {
+        pdaInput.value = formatMoneyValue(pdaValue);
+      }
+    } else if (pdaInput && pdaInput.dataset.rawValue !== undefined && !pdaInput.readOnly) {
+      pdaInput.value = pdaInput.dataset.rawValue;
+      delete pdaInput.dataset.rawValue;
+      pdaValue = parseMoneyValue(pdaInput.value);
+    }
     const sailingValue = inputs.length >= 2 ? parseMoneyValue(inputs[1].value) : 0;
     runningPda += pdaValue;
     runningSailing += sailingValue;
@@ -825,6 +947,12 @@ function initIndex() {
     if (!target) return;
     if (target.tagName === 'TEXTAREA') {
       autoResizeTextarea(target);
+      if (target.classList.contains('text')) {
+        decorateMoneyEditCells();
+      }
+    }
+    if (target.classList.contains('money') && isPdaRoundingEnabled() && isPdaMoneyInput(target) && !target.readOnly) {
+      target.dataset.rawValue = target.value;
     }
     if (target.classList.contains('money') || target.classList.contains('percent-input')) {
       recalcOutlayTotals();
@@ -835,6 +963,7 @@ function initIndex() {
   outlaysTable = document.querySelector('.outlays-table');
   toggleSailing = document.getElementById('toggleSailing');
   outlaysCurrency = document.getElementById('outlaysCurrency');
+  roundPdaPrices = document.getElementById('roundPdaPrices');
   if (toggleSailing) {
     toggleSailing.addEventListener('change', () => {
       setSailingVisible(toggleSailing.checked);
@@ -842,7 +971,15 @@ function initIndex() {
     });
     setSailingVisible(toggleSailing.checked);
   }
+  if (roundPdaPrices) {
+    roundPdaPrices.addEventListener('change', () => {
+      recalcOutlayTotals();
+      saveIndexState();
+    });
+  }
   wrapMoneyFields();
+  decorateMoneyEditCells();
+  recalcOutlayTotals();
   if (outlaysCurrency) {
     updateCurrencySymbol(outlaysCurrency.value);
     outlaysCurrency.addEventListener('change', () => {
