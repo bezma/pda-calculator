@@ -1183,22 +1183,26 @@ body {margin: 0;
       display: none;
     }
 
-    body.page-tugs #tugCards{
+    body.page-tugs #tugCards,
+    body.page-tugs #mooringCards{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
     }
 
     @media (min-width: 1280px){
-      body.page-tugs #tugCards{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      body.page-tugs #tugCards,
+      body.page-tugs #mooringCards{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     @media (max-width: 900px){
-      body.page-tugs #tugCards{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      body.page-tugs #tugCards,
+      body.page-tugs #mooringCards{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 600px) and (orientation: portrait){
-      body.page-tugs #tugCards{ grid-template-columns: 1fr; }
+      body.page-tugs #tugCards,
+      body.page-tugs #mooringCards{ grid-template-columns: 1fr; }
     }
 
     body.page-tugs button{
@@ -1288,13 +1292,16 @@ body {margin: 0;
       body.page-tugs .actions{ gap: 8px; margin-bottom: 10px; }
       body.page-tugs button{ font-size: 13px; padding: 10px 12px; }
       body.page-tugs .tug-total{ font-size: 13px; padding: 8px 10px; }
-      body.page-tugs #tugCards{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      body.page-tugs #tugCards,
+      body.page-tugs #mooringCards{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media print and (min-width: 1280px){
-      body.page-tugs #tugCards{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      body.page-tugs #tugCards,
+      body.page-tugs #mooringCards{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     @media print and (max-width: 900px){
-      body.page-tugs #tugCards{ grid-template-columns: 1fr; }
+      body.page-tugs #tugCards,
+      body.page-tugs #mooringCards{ grid-template-columns: 1fr; }
     }

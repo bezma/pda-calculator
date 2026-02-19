@@ -10,6 +10,7 @@ let roundPdaPrices = null;
 const STORAGE_KEYS = {
   vesselName: 'pda_vessel_name',
   gt: 'pda_gt',
+  quantity: 'pda_quantity',
   indexState: 'pda_index_state',
   towageTotal: 'pda_towage_total',
   towageArrivalCount: 'pda_towage_arrival_count',
@@ -24,7 +25,19 @@ const STORAGE_KEYS = {
   lightDuesAmountPda: 'pda_light_dues_amount_pda',
   lightDuesTariffPda: 'pda_light_dues_tariff_pda',
   lightDuesAmountSailing: 'pda_light_dues_amount_sailing',
-  lightDuesTariffSailing: 'pda_light_dues_tariff_sailing'
+  lightDuesTariffSailing: 'pda_light_dues_tariff_sailing',
+  portDuesState: 'pda_port_dues_state',
+  portDuesStateSailing: 'pda_port_dues_state_sailing',
+  portDuesAmountPda: 'pda_port_dues_amount_pda',
+  portDuesAmountSailing: 'pda_port_dues_amount_sailing',
+  portDuesCargoAmountPda: 'pda_port_dues_cargo_amount_pda',
+  portDuesCargoAmountSailing: 'pda_port_dues_cargo_amount_sailing',
+  portDuesBunkeringAmountPda: 'pda_port_dues_bunkering_amount_pda',
+  portDuesBunkeringAmountSailing: 'pda_port_dues_bunkering_amount_sailing',
+  mooringState: 'pda_mooring_state',
+  mooringStateSailing: 'pda_mooring_state_sailing',
+  mooringAmountPda: 'pda_mooring_amount_pda',
+  mooringAmountSailing: 'pda_mooring_amount_sailing'
 };
 
 const INDEX_FIELD_IDS = [
@@ -215,6 +228,37 @@ const LIGHT_DUES_TIER_OPTIONS = {
     { value: 'gt80000', label: 'if > 80.000 GT', min: 80001 }
   ]
 };
+
+const PORT_DUES_CARGO_TYPES = {
+  bulkCargo: { rate: 0.6, label: '0,60' },
+  cementGravelSawdustBulkStoneSlagPetroleumCokeClinkerCoal: { rate: 0.33, label: '0,33' },
+  grains: { rate: 0.5, label: '0,50' },
+  sulphur: { rate: 0.48, label: '0,48' },
+  scrapIron: { rate: 0.33, label: '0,33' },
+  copper: { rate: 0.4, label: '0,40' },
+  liquidCargo: { rate: 1, label: '1,00' },
+  generalCargo: { rate: 1, label: '1,00' },
+  baggedCement: { rate: 0.8, label: '0,80' },
+  explosiveCargo: { rate: 2.9, label: '2,90' },
+  heavyCargo: { rate: 2, label: '2,00' },
+  containerPerGt: { rate: 0.84, label: '0,84' }
+};
+
+const MOORING_GT_TARIFFS = [
+  { min: 0, max: 250, amount: 8.4 },
+  { min: 251, max: 500, amount: 14.7 },
+  { min: 501, max: 1000, amount: 21.7 },
+  { min: 1001, max: 2000, amount: 30.8 },
+  { min: 2001, max: 4000, amount: 43.4 },
+  { min: 4001, max: 7000, amount: 61.04 },
+  { min: 7001, max: 11000, amount: 86.1 },
+  { min: 11001, max: 15000, amount: 121.8 },
+  { min: 15001, max: 20000, amount: 162.4 },
+  { min: 20001, max: 25000, amount: 203 },
+  { min: 25001, max: 30000, amount: 243.6 },
+  { min: 30001, max: 35000, amount: 285.6 }
+];
+const BUNKER_ROW_DESCRIPTION = 'BUNKER (EUR 0,30 x loaded bunker / MT )';
 
 function safeStorageGet(key) {
   try {
@@ -594,15 +638,94 @@ function findLightDuesRow() {
   }) || null;
 }
 
+function getCurrentGtValue() {
+  const gtInput = document.getElementById('grossTonnage');
+  const raw = gtInput ? gtInput.value : safeStorageGet(STORAGE_KEYS.gt);
+  return parseMoneyValue(raw);
+}
+
+function getCurrentQuantityValue() {
+  const quantityInput = document.getElementById('quantityInput');
+  const raw = quantityInput ? quantityInput.value : safeStorageGet(STORAGE_KEYS.quantity);
+  return parseMoneyValue(raw);
+}
+
+function parseStoredJson(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function getSelectedPeriodFromState(state) {
+  if (!state || typeof state !== 'object') return '30';
+  if (state.period12 === true) return '12';
+  return '30';
+}
+
+function getLightDuesCalculationFromState(state, gt) {
+  if (!state || typeof state !== 'object' || !Number.isFinite(gt) || gt <= 0) return null;
+  const type = typeof state.type === 'string' ? state.type : 'cargo';
+  const tierBand = state.tierBand || state.bulkBand || '';
+  const tariff = getLightDuesTariff(type, tierBand, gt);
+  const selectedPeriod = getSelectedPeriodFromState(state);
+  if (!tariff) return null;
+  if (selectedPeriod === '12') {
+    return {
+      tariffLabel: tariff.label12,
+      amount: gt * tariff.rate12
+    };
+  }
+  return {
+    tariffLabel: tariff.label30,
+    amount: gt * tariff.rate30
+  };
+}
+
+function getCoefficientFromDescription(descValue) {
+  const match = String(descValue || '').match(/EUR\s*([0-9.,]+)\s*x/i);
+  if (!match || !match[1]) return null;
+  const coefficient = parseMoneyValue(match[1]);
+  if (!Number.isFinite(coefficient) || coefficient <= 0) return null;
+  return {
+    value: coefficient,
+    label: match[1].replace(/\s+/g, '')
+  };
+}
+
 function updateLightDuesFromStorage() {
   const lightDuesRow = findLightDuesRow();
   if (!lightDuesRow) return;
 
   let changed = false;
+  const gt = getCurrentGtValue();
   const descInput = lightDuesRow.querySelector('td.desc textarea, td.desc input');
-  const tariffPda = safeStorageGet(STORAGE_KEYS.lightDuesTariffPda);
-  if (tariffPda && descInput) {
-    const nextDesc = `LIGHT DUES (EUR ${tariffPda} x vsl's GRT)`;
+  const pdaState = parseStoredJson(safeStorageGet(STORAGE_KEYS.lightDuesState));
+  const sailingState = parseStoredJson(safeStorageGet(STORAGE_KEYS.lightDuesStateSailing));
+  const pdaCalc = getLightDuesCalculationFromState(pdaState, gt);
+  const sailingCalc = getLightDuesCalculationFromState(sailingState, gt);
+  const descCoefficient = getCoefficientFromDescription(descInput ? descInput.value : '');
+
+  const pdaInput = lightDuesRow.querySelector('td:nth-child(2) input.cell-input.money');
+  let pdaTariffLabel = safeStorageGet(STORAGE_KEYS.lightDuesTariffPda);
+  let pdaAmount = Number(safeStorageGet(STORAGE_KEYS.lightDuesAmountPda));
+  if (pdaCalc) {
+    pdaTariffLabel = pdaCalc.tariffLabel;
+    pdaAmount = pdaCalc.amount;
+    safeStorageSet(STORAGE_KEYS.lightDuesTariffPda, pdaTariffLabel);
+    safeStorageSet(STORAGE_KEYS.lightDuesAmountPda, pdaAmount.toFixed(2));
+  } else if (Number.isFinite(gt) && gt > 0 && descCoefficient) {
+    pdaTariffLabel = descCoefficient.label;
+    pdaAmount = gt * descCoefficient.value;
+    safeStorageSet(STORAGE_KEYS.lightDuesTariffPda, pdaTariffLabel);
+    safeStorageSet(STORAGE_KEYS.lightDuesAmountPda, pdaAmount.toFixed(2));
+  }
+
+  if (pdaTariffLabel && descInput) {
+    const nextDesc = `LIGHT DUES (EUR ${pdaTariffLabel} x vsl's GRT)`;
     if (descInput.value !== nextDesc) {
       descInput.value = nextDesc;
       if (descInput.tagName === 'TEXTAREA') autoResizeTextarea(descInput);
@@ -610,10 +733,8 @@ function updateLightDuesFromStorage() {
     }
   }
 
-  const pdaInput = lightDuesRow.querySelector('td:nth-child(2) input.cell-input.money');
-  const pdaAmountRaw = Number(safeStorageGet(STORAGE_KEYS.lightDuesAmountPda));
-  if (pdaInput && Number.isFinite(pdaAmountRaw)) {
-    const formatted = formatMoneyValue(pdaAmountRaw);
+  if (pdaInput && Number.isFinite(pdaAmount)) {
+    const formatted = formatMoneyValue(pdaAmount);
     if (pdaInput.value !== formatted) {
       pdaInput.value = formatted;
       if (isPdaRoundingEnabled()) pdaInput.dataset.rawValue = formatted;
@@ -623,9 +744,309 @@ function updateLightDuesFromStorage() {
   }
 
   const sailingInput = lightDuesRow.querySelector('td:nth-child(3) input.cell-input.money');
-  const sailingAmountRaw = Number(safeStorageGet(STORAGE_KEYS.lightDuesAmountSailing));
-  if (sailingInput && Number.isFinite(sailingAmountRaw)) {
-    const formatted = formatMoneyValue(sailingAmountRaw);
+  let sailingAmount = Number(safeStorageGet(STORAGE_KEYS.lightDuesAmountSailing));
+  if (sailingCalc) {
+    sailingAmount = sailingCalc.amount;
+    safeStorageSet(STORAGE_KEYS.lightDuesTariffSailing, sailingCalc.tariffLabel);
+    safeStorageSet(STORAGE_KEYS.lightDuesAmountSailing, sailingAmount.toFixed(2));
+  } else if (Number.isFinite(gt) && gt > 0) {
+    if (sailingState && sailingCalc === null) {
+      // keep existing value if sailing state is invalid.
+    } else if (pdaCalc) {
+      sailingAmount = pdaCalc.amount;
+      safeStorageSet(STORAGE_KEYS.lightDuesTariffSailing, pdaCalc.tariffLabel);
+      safeStorageSet(STORAGE_KEYS.lightDuesAmountSailing, sailingAmount.toFixed(2));
+    } else if (descCoefficient) {
+      sailingAmount = gt * descCoefficient.value;
+      safeStorageSet(STORAGE_KEYS.lightDuesAmountSailing, sailingAmount.toFixed(2));
+    }
+  }
+
+  if (sailingInput && Number.isFinite(sailingAmount)) {
+    const formatted = formatMoneyValue(sailingAmount);
+    if (sailingInput.value !== formatted) {
+      sailingInput.value = formatted;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    recalcOutlayTotals();
+    saveIndexState();
+  }
+}
+
+function findPortDuesRow() {
+  const byDataRow = document.querySelector('tr[data-row="port-dues"]');
+  if (byDataRow) return byDataRow;
+  const tbody = document.getElementById('outlaysBody');
+  if (!tbody) return null;
+  return Array.from(tbody.querySelectorAll('tr')).find((row) => {
+    const descField = row.querySelector('td.desc textarea, td.desc input');
+    const desc = String(descField?.value || '').trim().toUpperCase();
+    return desc.startsWith('PORT DUES');
+  }) || null;
+}
+
+function findBunkerRow() {
+  return document.querySelector('tr[data-row="bunker"]');
+}
+
+function createBunkerRow() {
+  const row = document.createElement('tr');
+  row.dataset.row = 'bunker';
+  row.innerHTML = `
+    <td class="desc"><textarea class="cell-input text" rows="1">${BUNKER_ROW_DESCRIPTION}</textarea></td>
+    <td><input class="cell-input money" value="" /></td>
+    <td><input class="cell-input money" value="" /></td>
+  `;
+  return row;
+}
+
+function ensureBunkerRowAfterPortDues() {
+  const portDuesRow = findPortDuesRow();
+  if (!portDuesRow || !portDuesRow.parentElement) return null;
+  const tbody = portDuesRow.parentElement;
+
+  let bunkerRow = findBunkerRow();
+  if (!bunkerRow) {
+    bunkerRow = createBunkerRow();
+  }
+
+  const targetNext = portDuesRow.nextElementSibling;
+  if (targetNext !== bunkerRow) {
+    tbody.insertBefore(bunkerRow, targetNext);
+  }
+
+  decorateOutlayRows();
+  wrapMoneyFields();
+  decorateMoneyEditCells();
+  const descInput = bunkerRow.querySelector('textarea.cell-input.text');
+  if (descInput) autoResizeTextarea(descInput);
+  return bunkerRow;
+}
+
+function updateBunkerRowFromStorage() {
+  const pdaBunkeringRaw = Number(safeStorageGet(STORAGE_KEYS.portDuesBunkeringAmountPda));
+  const sailingBunkeringRaw = Number(safeStorageGet(STORAGE_KEYS.portDuesBunkeringAmountSailing));
+
+  const pdaBunkering = Number.isFinite(pdaBunkeringRaw) ? pdaBunkeringRaw : 0;
+  const sailingBunkering = Number.isFinite(sailingBunkeringRaw) ? sailingBunkeringRaw : 0;
+  const hasBunkering = pdaBunkering > 0 || sailingBunkering > 0;
+
+  const existingBunkerRow = findBunkerRow();
+  if (!hasBunkering) {
+    if (existingBunkerRow) {
+      existingBunkerRow.remove();
+      recalcOutlayTotals();
+      saveIndexState();
+    }
+    return;
+  }
+
+  const bunkerRow = ensureBunkerRowAfterPortDues();
+  if (!bunkerRow) return;
+
+  let changed = false;
+  const descInput = bunkerRow.querySelector('td.desc textarea, td.desc input');
+  if (descInput && descInput.value !== BUNKER_ROW_DESCRIPTION) {
+    descInput.value = BUNKER_ROW_DESCRIPTION;
+    if (descInput.tagName === 'TEXTAREA') autoResizeTextarea(descInput);
+    changed = true;
+  }
+
+  const pdaInput = bunkerRow.querySelector('td:nth-child(2) input.cell-input.money');
+  if (pdaInput) {
+    const formatted = formatMoneyValue(pdaBunkering);
+    if (pdaInput.value !== formatted) {
+      pdaInput.value = formatted;
+      if (isPdaRoundingEnabled()) pdaInput.dataset.rawValue = formatted;
+      else delete pdaInput.dataset.rawValue;
+      changed = true;
+    }
+  }
+
+  const sailingInput = bunkerRow.querySelector('td:nth-child(3) input.cell-input.money');
+  if (sailingInput) {
+    const formatted = formatMoneyValue(sailingBunkering);
+    if (sailingInput.value !== formatted) {
+      sailingInput.value = formatted;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    recalcOutlayTotals();
+    saveIndexState();
+  }
+}
+
+function getPortDuesCalculationFromState(state, quantityValue) {
+  if (!state || typeof state !== 'object') return null;
+  const cargoType = getPortDuesCargoTypeConfig(state.cargoType);
+  const cargoQuantityFromState = parseMoneyValue(state.cargoQuantity);
+  const cargoQuantity = quantityValue > 0 ? quantityValue : cargoQuantityFromState;
+  const cargoAmount = cargoQuantity > 0 ? cargoQuantity * cargoType.rate : 0;
+
+  const bunkeringEnabled = Boolean(state.bunkeringEnabled);
+  const bunkeringQuantity = parseMoneyValue(state.bunkeringQuantity);
+  const bunkeringAmount = bunkeringEnabled && bunkeringQuantity > 0 ? bunkeringQuantity * 0.3 : 0;
+
+  return {
+    coefficientLabel: cargoType.label,
+    cargoAmount,
+    bunkeringAmount,
+    totalAmount: cargoAmount + bunkeringAmount
+  };
+}
+
+function updatePortDuesFromStorage() {
+  const portDuesRow = findPortDuesRow();
+  if (!portDuesRow) return;
+
+  let changed = false;
+  const quantity = getCurrentQuantityValue();
+  const pdaState = parseStoredJson(safeStorageGet(STORAGE_KEYS.portDuesState));
+  const sailingState = parseStoredJson(safeStorageGet(STORAGE_KEYS.portDuesStateSailing));
+  const pdaCalc = getPortDuesCalculationFromState(pdaState, quantity);
+  const sailingCalc = getPortDuesCalculationFromState(sailingState, quantity);
+
+  const descInput = portDuesRow.querySelector('td.desc textarea, td.desc input');
+  const descCoefficient = getCoefficientFromDescription(descInput ? descInput.value : '');
+  if (descInput) {
+    let coefficientLabel = '';
+    if (pdaCalc) {
+      coefficientLabel = pdaCalc.coefficientLabel;
+    } else if (pdaState && typeof pdaState.cargoType === 'string') {
+      coefficientLabel = getPortDuesCargoTypeConfig(pdaState.cargoType).label;
+    } else if (descCoefficient) {
+      coefficientLabel = descCoefficient.label;
+    }
+    if (coefficientLabel) {
+      const nextDesc = `PORT DUES (EUR ${coefficientLabel} x cargo / MT)`;
+      if (descInput.value !== nextDesc) {
+        descInput.value = nextDesc;
+        if (descInput.tagName === 'TEXTAREA') autoResizeTextarea(descInput);
+        changed = true;
+      }
+    }
+  }
+
+  const pdaInput = portDuesRow.querySelector('td:nth-child(2) input.cell-input.money');
+  let pdaAmount = Number(safeStorageGet(STORAGE_KEYS.portDuesCargoAmountPda) ?? safeStorageGet(STORAGE_KEYS.portDuesAmountPda));
+  if (pdaCalc) {
+    pdaAmount = pdaCalc.totalAmount;
+    safeStorageSet(STORAGE_KEYS.portDuesAmountPda, pdaCalc.totalAmount.toFixed(2));
+    safeStorageSet(STORAGE_KEYS.portDuesCargoAmountPda, pdaCalc.cargoAmount.toFixed(2));
+    if (pdaCalc.bunkeringAmount > 0) {
+      safeStorageSet(STORAGE_KEYS.portDuesBunkeringAmountPda, pdaCalc.bunkeringAmount.toFixed(2));
+    } else {
+      safeStorageRemove(STORAGE_KEYS.portDuesBunkeringAmountPda);
+    }
+  } else if (quantity > 0 && descCoefficient) {
+    pdaAmount = quantity * descCoefficient.value;
+    safeStorageSet(STORAGE_KEYS.portDuesAmountPda, pdaAmount.toFixed(2));
+    safeStorageSet(STORAGE_KEYS.portDuesCargoAmountPda, pdaAmount.toFixed(2));
+  }
+
+  if (pdaInput && Number.isFinite(pdaAmount)) {
+    const formatted = formatMoneyValue(pdaAmount);
+    if (pdaInput.value !== formatted) {
+      pdaInput.value = formatted;
+      if (isPdaRoundingEnabled()) pdaInput.dataset.rawValue = formatted;
+      else delete pdaInput.dataset.rawValue;
+      changed = true;
+    }
+  }
+
+  const sailingInput = portDuesRow.querySelector('td:nth-child(3) input.cell-input.money');
+  let sailingAmount = Number(safeStorageGet(STORAGE_KEYS.portDuesCargoAmountSailing) ?? safeStorageGet(STORAGE_KEYS.portDuesAmountSailing));
+  if (sailingCalc) {
+    sailingAmount = sailingCalc.totalAmount;
+    safeStorageSet(STORAGE_KEYS.portDuesAmountSailing, sailingCalc.totalAmount.toFixed(2));
+    safeStorageSet(STORAGE_KEYS.portDuesCargoAmountSailing, sailingCalc.cargoAmount.toFixed(2));
+    if (sailingCalc.bunkeringAmount > 0) {
+      safeStorageSet(STORAGE_KEYS.portDuesBunkeringAmountSailing, sailingCalc.bunkeringAmount.toFixed(2));
+    } else {
+      safeStorageRemove(STORAGE_KEYS.portDuesBunkeringAmountSailing);
+    }
+  } else if (quantity > 0) {
+    if (sailingState && sailingCalc === null) {
+      // keep existing value if sailing state exists but cannot be calculated.
+    } else if (pdaCalc) {
+      sailingAmount = pdaCalc.totalAmount;
+      safeStorageSet(STORAGE_KEYS.portDuesAmountSailing, sailingAmount.toFixed(2));
+      safeStorageSet(STORAGE_KEYS.portDuesCargoAmountSailing, sailingAmount.toFixed(2));
+    } else if (descCoefficient) {
+      sailingAmount = quantity * descCoefficient.value;
+      safeStorageSet(STORAGE_KEYS.portDuesAmountSailing, sailingAmount.toFixed(2));
+      safeStorageSet(STORAGE_KEYS.portDuesCargoAmountSailing, sailingAmount.toFixed(2));
+    }
+  }
+
+  if (sailingInput && Number.isFinite(sailingAmount)) {
+    const formatted = formatMoneyValue(sailingAmount);
+    if (sailingInput.value !== formatted) {
+      sailingInput.value = formatted;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    recalcOutlayTotals();
+    saveIndexState();
+  }
+  updateBunkerRowFromStorage();
+}
+
+function findMooringRow() {
+  const tbody = document.getElementById('outlaysBody');
+  if (!tbody) return null;
+  return Array.from(tbody.querySelectorAll('tr')).find((row) => {
+    const descField = row.querySelector('td.desc textarea, td.desc input');
+    const desc = String(descField?.value || '').trim().toUpperCase();
+    return desc.startsWith('MOORING/UNMOORING');
+  }) || null;
+}
+
+function updateMooringFromStorage() {
+  const mooringRow = findMooringRow();
+  if (!mooringRow) return;
+
+  let changed = false;
+  const gt = getCurrentGtValue();
+  const pdaState = parseStoredJson(safeStorageGet(STORAGE_KEYS.mooringState));
+  const sailingState = parseStoredJson(safeStorageGet(STORAGE_KEYS.mooringStateSailing));
+  const pdaCalc = getMooringCalculationFromState(pdaState, gt);
+  const sailingCalc = getMooringCalculationFromState(sailingState, gt);
+
+  const pdaInput = mooringRow.querySelector('td:nth-child(2) input.cell-input.money');
+  let pdaAmount = Number(safeStorageGet(STORAGE_KEYS.mooringAmountPda));
+  if (pdaCalc) {
+    pdaAmount = pdaCalc.totalAmount;
+    safeStorageSet(STORAGE_KEYS.mooringAmountPda, pdaAmount.toFixed(2));
+  }
+  if (pdaInput && Number.isFinite(pdaAmount)) {
+    const formatted = formatMoneyValue(pdaAmount);
+    if (pdaInput.value !== formatted) {
+      pdaInput.value = formatted;
+      if (isPdaRoundingEnabled()) pdaInput.dataset.rawValue = formatted;
+      else delete pdaInput.dataset.rawValue;
+      changed = true;
+    }
+  }
+
+  const sailingInput = mooringRow.querySelector('td:nth-child(3) input.cell-input.money');
+  let sailingAmount = Number(safeStorageGet(STORAGE_KEYS.mooringAmountSailing));
+  if (sailingCalc) {
+    sailingAmount = sailingCalc.totalAmount;
+    safeStorageSet(STORAGE_KEYS.mooringAmountSailing, sailingAmount.toFixed(2));
+  } else if ((!Number.isFinite(sailingAmount) || sailingAmount <= 0) && pdaCalc) {
+    sailingAmount = pdaCalc.totalAmount;
+    safeStorageSet(STORAGE_KEYS.mooringAmountSailing, sailingAmount.toFixed(2));
+  }
+  if (sailingInput && Number.isFinite(sailingAmount)) {
+    const formatted = formatMoneyValue(sailingAmount);
     if (sailingInput.value !== formatted) {
       sailingInput.value = formatted;
       changed = true;
@@ -645,6 +1066,16 @@ function updateIndexGtFromStorage() {
   if (!storedGt) return;
   if (gtInputIndex.value !== storedGt) {
     gtInputIndex.value = storedGt;
+  }
+}
+
+function updateIndexQuantityFromStorage() {
+  const quantityInput = document.getElementById('quantityInput');
+  if (!quantityInput) return;
+  const storedQuantity = safeStorageGet(STORAGE_KEYS.quantity);
+  if (storedQuantity === null) return;
+  if (quantityInput.value !== storedQuantity) {
+    quantityInput.value = storedQuantity;
   }
 }
 
@@ -671,9 +1102,23 @@ function parseMoneyValue(raw) {
 
   let normalized = cleaned;
   if (hasComma && hasDot) {
-    normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      normalized = cleaned.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      normalized = cleaned.replace(/,/g, '');
+    }
   } else if (hasComma && !hasDot) {
-    normalized = cleaned.replace(',', '.');
+    if (/^-?\d{1,3}(,\d{3})+$/.test(cleaned)) {
+      normalized = cleaned.replace(/,/g, '');
+    } else {
+      normalized = cleaned.replace(/,/g, '.');
+    }
+  } else if (hasDot && !hasComma) {
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) {
+      normalized = cleaned.replace(/\./g, '');
+    }
   }
 
   const value = Number(normalized);
@@ -792,6 +1237,30 @@ function getInlineMoneyEditConfig(row, columnIndex) {
       ariaLabel: 'Edit light dues sailing PDA'
     };
   }
+  if (desc.startsWith('PORT DUES')) {
+    if (columnIndex === 2) {
+      return {
+        onClick: 'openPortDuesPda()',
+        ariaLabel: 'Edit port dues PDA'
+      };
+    }
+    return {
+      onClick: 'openPortDuesSailingPda()',
+      ariaLabel: 'Edit port dues sailing PDA'
+    };
+  }
+  if (desc.startsWith('MOORING/UNMOORING')) {
+    if (columnIndex === 2) {
+      return {
+        onClick: 'openMooringPda()',
+        ariaLabel: 'Edit mooring PDA'
+      };
+    }
+    return {
+      onClick: 'openMooringSailingPda()',
+      ariaLabel: 'Edit mooring sailing PDA'
+    };
+  }
   return {
     onClick: 'focusMoneyFromEdit(this)',
     ariaLabel: columnIndex === 2 ? 'Edit PDA amount' : 'Edit Sailing PDA amount'
@@ -908,6 +1377,12 @@ function recalcOutlayTotals() {
 function removeOutlayRow(row) {
   const tbody = document.getElementById('outlaysBody');
   if (!tbody || !row) return;
+
+  const descField = row.querySelector('td.desc textarea, td.desc input');
+  const descText = String(descField?.value || '').trim();
+  const label = descText ? `\n\nRow: ${descText}` : '';
+  const confirmed = window.confirm(`Delete this row?${label}`);
+  if (!confirmed) return;
 
   const rows = tbody.querySelectorAll('tr');
   if (rows.length <= 1) {
@@ -1120,6 +1595,50 @@ function openLightDuesSailingPda() {
   window.location.href = 'light-dues-sailing-pda.html';
 }
 
+function openPortDuesPda() {
+  saveIndexState();
+  const quantityInput = document.getElementById('quantityInput');
+  if (quantityInput) {
+    const quantityValue = quantityInput.value.trim();
+    if (quantityValue) safeStorageSet(STORAGE_KEYS.quantity, quantityValue);
+    else safeStorageRemove(STORAGE_KEYS.quantity);
+  }
+  window.location.href = 'port-dues-pda.html';
+}
+
+function openPortDuesSailingPda() {
+  saveIndexState();
+  const quantityInput = document.getElementById('quantityInput');
+  if (quantityInput) {
+    const quantityValue = quantityInput.value.trim();
+    if (quantityValue) safeStorageSet(STORAGE_KEYS.quantity, quantityValue);
+    else safeStorageRemove(STORAGE_KEYS.quantity);
+  }
+  window.location.href = 'port-dues-sailing-pda.html';
+}
+
+function openMooringPda() {
+  saveIndexState();
+  const gtInputIndex = document.getElementById('grossTonnage');
+  if (gtInputIndex) {
+    const gtValue = gtInputIndex.value.trim();
+    if (gtValue) safeStorageSet(STORAGE_KEYS.gt, gtValue);
+    else safeStorageRemove(STORAGE_KEYS.gt);
+  }
+  window.location.href = 'mooring-pda.html';
+}
+
+function openMooringSailingPda() {
+  saveIndexState();
+  const gtInputIndex = document.getElementById('grossTonnage');
+  if (gtInputIndex) {
+    const gtValue = gtInputIndex.value.trim();
+    if (gtValue) safeStorageSet(STORAGE_KEYS.gt, gtValue);
+    else safeStorageRemove(STORAGE_KEYS.gt);
+  }
+  window.location.href = 'mooring-sailing-pda.html';
+}
+
 function goHome() {
   saveTugsState();
   window.location.href = 'index.html';
@@ -1271,6 +1790,25 @@ function initIndex() {
       const value = gtInputIndex.value.trim();
       if (value) safeStorageSet(STORAGE_KEYS.gt, value);
       else safeStorageRemove(STORAGE_KEYS.gt);
+      updateLightDuesFromStorage();
+      updateMooringFromStorage();
+      saveIndexState();
+    });
+  }
+
+  const quantityInputIndex = document.getElementById('quantityInput');
+  if (quantityInputIndex) {
+    const storedQuantity = safeStorageGet(STORAGE_KEYS.quantity);
+    if (storedQuantity === null) {
+      const currentQuantity = quantityInputIndex.value.trim();
+      if (currentQuantity) safeStorageSet(STORAGE_KEYS.quantity, currentQuantity);
+    }
+    updateIndexQuantityFromStorage();
+    quantityInputIndex.addEventListener('input', () => {
+      const value = quantityInputIndex.value.trim();
+      if (value) safeStorageSet(STORAGE_KEYS.quantity, value);
+      else safeStorageRemove(STORAGE_KEYS.quantity);
+      updatePortDuesFromStorage();
       saveIndexState();
     });
   }
@@ -1330,15 +1868,24 @@ function initIndex() {
 
   updateTowageFromStorage();
   updateLightDuesFromStorage();
+  updatePortDuesFromStorage();
+  updateMooringFromStorage();
   updateIndexGtFromStorage();
+  updateIndexQuantityFromStorage();
   window.addEventListener('pageshow', () => {
     updateTowageFromStorage();
     updateLightDuesFromStorage();
+    updatePortDuesFromStorage();
+    updateMooringFromStorage();
+    updateIndexQuantityFromStorage();
   });
   window.addEventListener('storage', () => {
     updateTowageFromStorage();
     updateLightDuesFromStorage();
+    updatePortDuesFromStorage();
+    updateMooringFromStorage();
     updateIndexGtFromStorage();
+    updateIndexQuantityFromStorage();
     updateVesselNameFromStorage(vesselNameIndex);
   });
 
@@ -1582,6 +2129,686 @@ function initLightDues() {
   });
 }
 
+function isPortDuesPdaPage() {
+  return Boolean(document.body && document.body.classList.contains('page-port-dues-pda'));
+}
+
+function isPortDuesSailingPage() {
+  return Boolean(document.body && document.body.classList.contains('page-port-dues-sailing'));
+}
+
+function getPortDuesStateKey() {
+  if (isPortDuesSailingPage()) return STORAGE_KEYS.portDuesStateSailing;
+  if (isPortDuesPdaPage()) return STORAGE_KEYS.portDuesState;
+  return null;
+}
+
+function getPortDuesAmountKey() {
+  if (isPortDuesSailingPage()) return STORAGE_KEYS.portDuesAmountSailing;
+  if (isPortDuesPdaPage()) return STORAGE_KEYS.portDuesAmountPda;
+  return null;
+}
+
+function getPortDuesCargoAmountKey() {
+  if (isPortDuesSailingPage()) return STORAGE_KEYS.portDuesCargoAmountSailing;
+  if (isPortDuesPdaPage()) return STORAGE_KEYS.portDuesCargoAmountPda;
+  return null;
+}
+
+function getPortDuesBunkeringAmountKey() {
+  if (isPortDuesSailingPage()) return STORAGE_KEYS.portDuesBunkeringAmountSailing;
+  if (isPortDuesPdaPage()) return STORAGE_KEYS.portDuesBunkeringAmountPda;
+  return null;
+}
+
+function getPortDuesCargoTypeConfig(type) {
+  return PORT_DUES_CARGO_TYPES[type] || PORT_DUES_CARGO_TYPES.bulkCargo;
+}
+
+function setPortDuesBunkeringState(toggleInput, quantityInput) {
+  if (!toggleInput || !quantityInput) return;
+  quantityInput.disabled = !toggleInput.checked;
+}
+
+function savePortDuesState() {
+  const stateKey = getPortDuesStateKey();
+  if (!stateKey) return;
+
+  const cargoQuantityInput = document.getElementById('portDuesCargoQuantity');
+  const cargoTypeInput = document.getElementById('portDuesCargoType');
+  const bunkeringToggleInput = document.getElementById('portDuesBunkeringToggle');
+  const bunkeringQuantityInput = document.getElementById('portDuesBunkeringQuantity');
+  if (!cargoQuantityInput || !cargoTypeInput || !bunkeringToggleInput || !bunkeringQuantityInput) return;
+
+  const state = {
+    cargoQuantity: cargoQuantityInput.value,
+    cargoType: cargoTypeInput.value,
+    bunkeringEnabled: Boolean(bunkeringToggleInput.checked),
+    bunkeringQuantity: bunkeringQuantityInput.value
+  };
+  safeStorageSet(stateKey, JSON.stringify(state));
+}
+
+function restorePortDuesState(cargoQuantityInput, cargoTypeInput, bunkeringToggleInput, bunkeringQuantityInput) {
+  const stateKey = getPortDuesStateKey();
+  if (stateKey) {
+    const raw = safeStorageGet(stateKey);
+    if (raw) {
+      let state = null;
+      try {
+        state = JSON.parse(raw);
+      } catch (error) {
+        state = null;
+      }
+      if (state && typeof state === 'object') {
+        if (typeof state.cargoQuantity === 'string') cargoQuantityInput.value = state.cargoQuantity;
+        if (typeof state.cargoType === 'string' && PORT_DUES_CARGO_TYPES[state.cargoType]) {
+          cargoTypeInput.value = state.cargoType;
+        }
+        if (typeof state.bunkeringEnabled === 'boolean') bunkeringToggleInput.checked = state.bunkeringEnabled;
+        if (typeof state.bunkeringQuantity === 'string') bunkeringQuantityInput.value = state.bunkeringQuantity;
+      }
+    }
+  }
+
+  const sharedQuantity = safeStorageGet(STORAGE_KEYS.quantity);
+  if (sharedQuantity !== null) {
+    cargoQuantityInput.value = sharedQuantity;
+  }
+
+  if (!PORT_DUES_CARGO_TYPES[cargoTypeInput.value]) {
+    cargoTypeInput.value = 'bulkCargo';
+  }
+  setPortDuesBunkeringState(bunkeringToggleInput, bunkeringQuantityInput);
+}
+
+function calculatePortDues() {
+  const cargoQuantityInput = document.getElementById('portDuesCargoQuantity');
+  const cargoTypeInput = document.getElementById('portDuesCargoType');
+  const bunkeringToggleInput = document.getElementById('portDuesBunkeringToggle');
+  const bunkeringQuantityInput = document.getElementById('portDuesBunkeringQuantity');
+  const cargoTariffInput = document.getElementById('portDuesCargoTariff');
+  const cargoAmountInput = document.getElementById('portDuesCargoAmount');
+  const bunkeringTariffInput = document.getElementById('portDuesBunkeringTariff');
+  const bunkeringAmountInput = document.getElementById('portDuesBunkeringAmount');
+  const totalAmountInput = document.getElementById('portDuesTotalAmount');
+  if (
+    !cargoQuantityInput || !cargoTypeInput || !bunkeringToggleInput || !bunkeringQuantityInput ||
+    !cargoTariffInput || !cargoAmountInput || !bunkeringTariffInput || !bunkeringAmountInput || !totalAmountInput
+  ) return;
+
+  const cargoType = getPortDuesCargoTypeConfig(cargoTypeInput.value);
+  const cargoQuantity = parseMoneyValue(cargoQuantityInput.value);
+  const cargoAmount = cargoQuantity > 0 ? cargoQuantity * cargoType.rate : 0;
+
+  const bunkeringQuantity = parseMoneyValue(bunkeringQuantityInput.value);
+  const bunkeringAmount = bunkeringToggleInput.checked && bunkeringQuantity > 0 ? bunkeringQuantity * 0.3 : 0;
+
+  const totalAmount = cargoAmount + bunkeringAmount;
+  const amountKey = getPortDuesAmountKey();
+  const cargoAmountKey = getPortDuesCargoAmountKey();
+  const bunkeringAmountKey = getPortDuesBunkeringAmountKey();
+  if (amountKey) {
+    safeStorageSet(amountKey, totalAmount.toFixed(2));
+  }
+  if (cargoAmountKey) {
+    safeStorageSet(cargoAmountKey, cargoAmount.toFixed(2));
+  }
+  if (bunkeringAmountKey) {
+    if (bunkeringAmount > 0) safeStorageSet(bunkeringAmountKey, bunkeringAmount.toFixed(2));
+    else safeStorageRemove(bunkeringAmountKey);
+  }
+
+  const quantityRaw = cargoQuantityInput.value.trim();
+  if (quantityRaw) safeStorageSet(STORAGE_KEYS.quantity, quantityRaw);
+  else safeStorageRemove(STORAGE_KEYS.quantity);
+
+  cargoTariffInput.value = cargoType.label;
+  cargoAmountInput.value = formatMoneyValue(cargoAmount);
+  bunkeringTariffInput.value = '0,30';
+  bunkeringAmountInput.value = formatMoneyValue(bunkeringAmount);
+  totalAmountInput.value = formatMoneyValue(totalAmount);
+  savePortDuesState();
+}
+
+function initPortDues() {
+  const cargoQuantityInput = document.getElementById('portDuesCargoQuantity');
+  const cargoTypeInput = document.getElementById('portDuesCargoType');
+  const bunkeringToggleInput = document.getElementById('portDuesBunkeringToggle');
+  const bunkeringQuantityInput = document.getElementById('portDuesBunkeringQuantity');
+  if (!cargoQuantityInput || !cargoTypeInput || !bunkeringToggleInput || !bunkeringQuantityInput) return;
+
+  restorePortDuesState(cargoQuantityInput, cargoTypeInput, bunkeringToggleInput, bunkeringQuantityInput);
+  calculatePortDues();
+
+  cargoQuantityInput.addEventListener('input', calculatePortDues);
+  cargoTypeInput.addEventListener('change', calculatePortDues);
+  bunkeringToggleInput.addEventListener('change', () => {
+    setPortDuesBunkeringState(bunkeringToggleInput, bunkeringQuantityInput);
+    calculatePortDues();
+  });
+  bunkeringQuantityInput.addEventListener('input', calculatePortDues);
+
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STORAGE_KEYS.quantity) return;
+    const nextQuantity = safeStorageGet(STORAGE_KEYS.quantity) || '';
+    if (cargoQuantityInput.value !== nextQuantity) {
+      cargoQuantityInput.value = nextQuantity;
+      calculatePortDues();
+    }
+  });
+}
+
+function isMooringPdaPage() {
+  return Boolean(document.body && document.body.classList.contains('page-mooring-pda'));
+}
+
+function isMooringSailingPage() {
+  return Boolean(document.body && document.body.classList.contains('page-mooring-sailing'));
+}
+
+function normalizeMooringOperation(value) {
+  if (value === 'departure') return 'departure';
+  if (value === 'shifting') return 'shifting';
+  return 'arrival';
+}
+
+function getMooringStateKey() {
+  if (isMooringSailingPage()) return STORAGE_KEYS.mooringStateSailing;
+  if (isMooringPdaPage()) return STORAGE_KEYS.mooringState;
+  return null;
+}
+
+function getMooringAmountKey() {
+  if (isMooringSailingPage()) return STORAGE_KEYS.mooringAmountSailing;
+  if (isMooringPdaPage()) return STORAGE_KEYS.mooringAmountPda;
+  return null;
+}
+
+function getMooringBaseByGt(gt) {
+  if (!Number.isFinite(gt) || gt <= 0) return 0;
+  const matched = MOORING_GT_TARIFFS.find((item) => gt >= item.min && gt <= item.max);
+  if (matched) return matched.amount;
+
+  const baseAt35000 = 285.6;
+  const additionalThousands = Math.ceil((gt - 35000) / 1000);
+  return baseAt35000 + Math.max(0, additionalThousands) * 10;
+}
+
+function setMooringAddonState(enabled, fieldsWrap, ...inputs) {
+  if (fieldsWrap) {
+    fieldsWrap.style.display = enabled ? '' : 'none';
+  }
+  inputs.forEach((input) => {
+    if (!input) return;
+    input.disabled = !enabled;
+  });
+}
+
+function getMooringLegacyCardFromState(state) {
+  const hasLegacyFields =
+    Object.prototype.hasOwnProperty.call(state, 'overtime25') ||
+    Object.prototype.hasOwnProperty.call(state, 'overtime50') ||
+    Object.prototype.hasOwnProperty.call(state, 'boatEnabled') ||
+    Object.prototype.hasOwnProperty.call(state, 'boatHours') ||
+    Object.prototype.hasOwnProperty.call(state, 'manEnabled') ||
+    Object.prototype.hasOwnProperty.call(state, 'manHours') ||
+    Object.prototype.hasOwnProperty.call(state, 'manPersons');
+  if (!hasLegacyFields) return null;
+
+  return {
+    operation: normalizeMooringOperation(state.operation),
+    overtime25: Boolean(state.overtime25),
+    overtime50: Boolean(state.overtime50),
+    boatEnabled: Boolean(state.boatEnabled),
+    boatHours: state.boatHours == null ? '' : String(state.boatHours),
+    manEnabled: Boolean(state.manEnabled),
+    manHours: state.manHours == null ? '' : String(state.manHours),
+    manPersons: state.manPersons == null ? '' : String(state.manPersons)
+  };
+}
+
+function getMooringCardsFromState(state) {
+  if (!state || typeof state !== 'object') return [];
+
+  if (Array.isArray(state.cards)) {
+    return state.cards.map((card) => ({
+      operation: normalizeMooringOperation(card?.operation),
+      overtime25: Boolean(card?.overtime25),
+      overtime50: Boolean(card?.overtime50),
+      boatEnabled: Boolean(card?.boatEnabled),
+      boatHours: card?.boatHours == null ? '' : String(card.boatHours),
+      manEnabled: Boolean(card?.manEnabled),
+      manHours: card?.manHours == null ? '' : String(card.manHours),
+      manPersons: card?.manPersons == null ? '' : String(card.manPersons)
+    }));
+  }
+
+  const legacyCard = getMooringLegacyCardFromState(state);
+  return legacyCard ? [legacyCard] : [];
+}
+
+function getMooringCardCalculation(cardState, gt) {
+  const operation = normalizeMooringOperation(cardState?.operation);
+  const overtime25 = Boolean(cardState?.overtime25);
+  const overtime50 = Boolean(cardState?.overtime50);
+  const boatEnabled = Boolean(cardState?.boatEnabled);
+  const boatHours = parseMoneyValue(cardState?.boatHours);
+  const manEnabled = Boolean(cardState?.manEnabled);
+  const manHours = parseMoneyValue(cardState?.manHours);
+  const manPersons = parseMoneyValue(cardState?.manPersons);
+
+  const baseAmount = getMooringBaseByGt(gt);
+  const overtimeFactor = 1 + (overtime25 ? 0.25 : 0) + (overtime50 ? 0.5 : 0);
+  const baseWithOvertime = baseAmount * overtimeFactor;
+  const boatAmount = boatEnabled ? 125 * boatHours : 0;
+  const manAmount = manEnabled ? 25 * manHours * manPersons : 0;
+  const totalAmount = baseWithOvertime + boatAmount + manAmount;
+
+  return {
+    operation,
+    overtime25,
+    overtime50,
+    boatEnabled,
+    boatHours,
+    manEnabled,
+    manHours,
+    manPersons,
+    baseAmount,
+    overtimeFactor,
+    baseWithOvertime,
+    boatAmount,
+    manAmount,
+    totalAmount
+  };
+}
+
+function getMooringCalculationFromState(state, gtValue) {
+  if (!state || typeof state !== 'object') return null;
+  const gt = Number.isFinite(gtValue) && gtValue > 0 ? gtValue : parseMoneyValue(state.gt);
+  if (!Number.isFinite(gt) || gt <= 0) return null;
+
+  const cardStates = getMooringCardsFromState(state);
+  const cards = cardStates.map((cardState) => getMooringCardCalculation(cardState, gt));
+
+  let arrivalTotal = 0;
+  let departureTotal = 0;
+  let shiftingTotal = 0;
+  cards.forEach((card) => {
+    if (card.operation === 'departure') {
+      departureTotal += card.totalAmount;
+    } else if (card.operation === 'shifting') {
+      shiftingTotal += card.totalAmount;
+    } else {
+      arrivalTotal += card.totalAmount;
+    }
+  });
+  const totalAmount = arrivalTotal + departureTotal + shiftingTotal;
+  const firstCard = cards[0] || {
+    baseAmount: 0,
+    overtimeFactor: 1,
+    baseWithOvertime: 0,
+    boatAmount: 0,
+    manAmount: 0
+  };
+
+  return {
+    gt,
+    cards,
+    arrivalTotal,
+    departureTotal,
+    shiftingTotal,
+    baseAmount: firstCard.baseAmount,
+    overtimeFactor: firstCard.overtimeFactor,
+    baseWithOvertime: firstCard.baseWithOvertime,
+    boatAmount: firstCard.boatAmount,
+    manAmount: firstCard.manAmount,
+    totalAmount
+  };
+}
+
+let mooringCardCount = 0;
+let isRestoringMooring = false;
+
+function getMooringCardState(id) {
+  return {
+    operation: normalizeMooringOperation(document.getElementById(`mooringOp_${id}`)?.value),
+    overtime25: Boolean(document.getElementById(`mooringOt25_${id}`)?.checked),
+    overtime50: Boolean(document.getElementById(`mooringOt50_${id}`)?.checked),
+    boatEnabled: Boolean(document.getElementById(`mooringBoatEnabled_${id}`)?.checked),
+    boatHours: document.getElementById(`mooringBoatHours_${id}`)?.value || '',
+    manEnabled: Boolean(document.getElementById(`mooringManEnabled_${id}`)?.checked),
+    manHours: document.getElementById(`mooringManHours_${id}`)?.value || '',
+    manPersons: document.getElementById(`mooringManPersons_${id}`)?.value || ''
+  };
+}
+
+function updateMooringCardTitles() {
+  const cards = document.querySelectorAll('#mooringCards .card[data-mooring-card]');
+  const operations = Array.from(cards).map((card) => {
+    const id = card.dataset.cardId;
+    return normalizeMooringOperation(document.getElementById(`mooringOp_${id}`)?.value);
+  });
+  const operationCounts = operations.reduce((acc, operation) => {
+    acc[operation] = (acc[operation] || 0) + 1;
+    return acc;
+  }, {});
+
+  let arrivalIndex = 0;
+  let departureIndex = 0;
+  let shiftingIndex = 0;
+
+  cards.forEach((card) => {
+    const id = card.dataset.cardId;
+    const operation = normalizeMooringOperation(document.getElementById(`mooringOp_${id}`)?.value);
+    const title = card.querySelector('.mooring-title');
+    if (!title) return;
+
+    if (operation === 'departure') {
+      departureIndex += 1;
+      const prefix = operationCounts.departure > 1 ? `${departureIndex}${getOrdinal(departureIndex)} ` : '';
+      title.textContent = `${prefix}Unmooring on departure`;
+      return;
+    }
+
+    if (operation === 'shifting') {
+      shiftingIndex += 1;
+      const prefix = operationCounts.shifting > 1 ? `${shiftingIndex}${getOrdinal(shiftingIndex)} ` : '';
+      title.textContent = `${prefix}Shifting berth to berth`;
+      return;
+    }
+
+    arrivalIndex += 1;
+    const prefix = operationCounts.arrival > 1 ? `${arrivalIndex}${getOrdinal(arrivalIndex)} ` : '';
+    title.textContent = `${prefix}Mooring on arrival`;
+  });
+}
+
+function addMooringCard(initialState = {}) {
+  const cardsWrap = document.getElementById('mooringCards');
+  if (!cardsWrap) return;
+
+  mooringCardCount += 1;
+  const id = mooringCardCount;
+  const operation = normalizeMooringOperation(initialState.operation);
+
+  cardsWrap.insertAdjacentHTML('beforeend', `
+    <div class="card" id="mooring_${id}" data-mooring-card="1" data-card-id="${id}">
+      <div class="tug-header">
+        <button class="icon-btn" onclick="removeMooringCard(${id})" aria-label="Remove mooring card">
+          <img src="assets/icons/remove_48×48.png" alt="Remove" />
+        </button>
+        <h3 class="mooring-title">Mooring</h3>
+        <span></span>
+      </div>
+
+      <label>Operation</label>
+      <select id="mooringOp_${id}">
+        <option value="arrival"${operation === 'arrival' ? ' selected' : ''}>Mooring on arrival</option>
+        <option value="departure"${operation === 'departure' ? ' selected' : ''}>Unmooring on departure</option>
+        <option value="shifting"${operation === 'shifting' ? ' selected' : ''}>Shifting berth to berth</option>
+      </select>
+
+      <div class="section-title">Overtime</div>
+      <label class="checkbox"><input id="mooringOt25_${id}" type="checkbox" /> 25% overtime - 22:00 - 6:00 hrs</label>
+      <label class="checkbox"><input id="mooringOt50_${id}" type="checkbox" /> 50% overtime - Holidays</label>
+
+      <div class="section-title">Additions</div>
+      <label class="checkbox"><input id="mooringBoatEnabled_${id}" type="checkbox" /> Use mooring boat (125 EUR / hour)</label>
+      <div id="mooringBoatFields_${id}">
+        <label>Boat Hours</label>
+        <input id="mooringBoatHours_${id}" type="number" min="0" step="0.25" placeholder="0" />
+      </div>
+
+      <label class="checkbox"><input id="mooringManEnabled_${id}" type="checkbox" /> Use additional mooring man (25 EUR / hour)</label>
+      <div id="mooringManFields_${id}">
+        <div class="row">
+          <div>
+            <label>Man Hours</label>
+            <input id="mooringManHours_${id}" type="number" min="0" step="0.25" placeholder="0" />
+          </div>
+          <div>
+            <label>Persons</label>
+            <input id="mooringManPersons_${id}" type="number" min="0" step="1" placeholder="0" />
+          </div>
+        </div>
+      </div>
+
+      <div class="tug-total" id="mooringCardTotal_${id}">Card total: €0.00</div>
+    </div>
+  `);
+
+  if (Object.prototype.hasOwnProperty.call(initialState, 'overtime25')) {
+    const input = document.getElementById(`mooringOt25_${id}`);
+    if (input) input.checked = Boolean(initialState.overtime25);
+  }
+  if (Object.prototype.hasOwnProperty.call(initialState, 'overtime50')) {
+    const input = document.getElementById(`mooringOt50_${id}`);
+    if (input) input.checked = Boolean(initialState.overtime50);
+  }
+  if (Object.prototype.hasOwnProperty.call(initialState, 'boatEnabled')) {
+    const input = document.getElementById(`mooringBoatEnabled_${id}`);
+    if (input) input.checked = Boolean(initialState.boatEnabled);
+  }
+  if (typeof initialState.boatHours === 'string') {
+    const input = document.getElementById(`mooringBoatHours_${id}`);
+    if (input) input.value = initialState.boatHours;
+  }
+  if (Object.prototype.hasOwnProperty.call(initialState, 'manEnabled')) {
+    const input = document.getElementById(`mooringManEnabled_${id}`);
+    if (input) input.checked = Boolean(initialState.manEnabled);
+  }
+  if (typeof initialState.manHours === 'string') {
+    const input = document.getElementById(`mooringManHours_${id}`);
+    if (input) input.value = initialState.manHours;
+  }
+  if (typeof initialState.manPersons === 'string') {
+    const input = document.getElementById(`mooringManPersons_${id}`);
+    if (input) input.value = initialState.manPersons;
+  }
+
+  const boatEnabledInput = document.getElementById(`mooringBoatEnabled_${id}`);
+  const boatFields = document.getElementById(`mooringBoatFields_${id}`);
+  const boatHoursInput = document.getElementById(`mooringBoatHours_${id}`);
+  const manEnabledInput = document.getElementById(`mooringManEnabled_${id}`);
+  const manFields = document.getElementById(`mooringManFields_${id}`);
+  const manHoursInput = document.getElementById(`mooringManHours_${id}`);
+  const manPersonsInput = document.getElementById(`mooringManPersons_${id}`);
+  setMooringAddonState(Boolean(boatEnabledInput?.checked), boatFields, boatHoursInput);
+  setMooringAddonState(Boolean(manEnabledInput?.checked), manFields, manHoursInput, manPersonsInput);
+
+  updateMooringCardTitles();
+  if (!isRestoringMooring) calculateMooring();
+}
+
+function addMooringArrivalCard() {
+  addMooringCard({ operation: 'arrival' });
+}
+
+function addMooringDepartureCard() {
+  addMooringCard({ operation: 'departure' });
+}
+
+function removeMooringCard(id) {
+  const card = document.getElementById(`mooring_${id}`);
+  if (!card) return;
+  card.remove();
+  updateMooringCardTitles();
+  calculateMooring();
+}
+
+function saveMooringState() {
+  const stateKey = getMooringStateKey();
+  if (!stateKey) return;
+
+  const gtInput = document.getElementById('mooringGt');
+  const cardsWrap = document.getElementById('mooringCards');
+  if (!gtInput || !cardsWrap) return;
+
+  const cards = Array.from(cardsWrap.querySelectorAll('.card[data-mooring-card]')).map((card) => {
+    const id = card.dataset.cardId;
+    return getMooringCardState(id);
+  });
+
+  const state = {
+    gt: gtInput.value,
+    cards
+  };
+  safeStorageSet(stateKey, JSON.stringify(state));
+}
+
+function restoreMooringState() {
+  const gtInput = document.getElementById('mooringGt');
+  const cardsWrap = document.getElementById('mooringCards');
+  if (!gtInput || !cardsWrap) return;
+
+  const stateKey = getMooringStateKey();
+  let state = null;
+  if (stateKey) {
+    state = parseStoredJson(safeStorageGet(stateKey));
+    if (state && typeof state.gt === 'string') gtInput.value = state.gt;
+  }
+
+  const sharedGt = safeStorageGet(STORAGE_KEYS.gt);
+  if (sharedGt !== null) {
+    gtInput.value = sharedGt;
+  }
+
+  const cards = getMooringCardsFromState(state || {});
+  isRestoringMooring = true;
+  cardsWrap.innerHTML = '';
+  mooringCardCount = 0;
+  if (cards.length === 0) {
+    addMooringCard({ operation: 'arrival' });
+    addMooringCard({ operation: 'departure' });
+  } else {
+    cards.forEach((cardState) => addMooringCard(cardState));
+    const hasArrival = cards.some((cardState) => normalizeMooringOperation(cardState.operation) === 'arrival');
+    const hasDeparture = cards.some((cardState) => normalizeMooringOperation(cardState.operation) === 'departure');
+    if (!hasArrival) addMooringCard({ operation: 'arrival' });
+    if (!hasDeparture) addMooringCard({ operation: 'departure' });
+  }
+  isRestoringMooring = false;
+  updateMooringCardTitles();
+}
+
+function calculateMooring() {
+  const gtInput = document.getElementById('mooringGt');
+  const cardsWrap = document.getElementById('mooringCards');
+  const final = document.getElementById('finalMooringTotal');
+  if (!gtInput || !cardsWrap || !final) return;
+
+  const gtRaw = gtInput.value.trim();
+  if (gtRaw) safeStorageSet(STORAGE_KEYS.gt, gtRaw);
+  else safeStorageRemove(STORAGE_KEYS.gt);
+  const gt = parseMoneyValue(gtInput.value);
+  const hasValidGt = Number.isFinite(gt) && gt > 0;
+
+  let arrivalTotal = 0;
+  let departureTotal = 0;
+  let shiftingTotal = 0;
+  const cardStates = [];
+  const cards = Array.from(cardsWrap.querySelectorAll('.card[data-mooring-card]'));
+  cards.forEach((card) => {
+    const id = card.dataset.cardId;
+    const cardState = getMooringCardState(id);
+    cardStates.push(cardState);
+
+    const cardTotal = document.getElementById(`mooringCardTotal_${id}`);
+    if (!hasValidGt) {
+      if (cardTotal) cardTotal.textContent = 'Card total: €0.00';
+      return;
+    }
+
+    const calculation = getMooringCardCalculation(cardState, gt);
+    if (calculation.operation === 'departure') {
+      departureTotal += calculation.totalAmount;
+    } else if (calculation.operation === 'shifting') {
+      shiftingTotal += calculation.totalAmount;
+    } else {
+      arrivalTotal += calculation.totalAmount;
+    }
+    if (cardTotal) cardTotal.textContent = `Card total: €${calculation.totalAmount.toFixed(2)}`;
+  });
+
+  const grandTotal = arrivalTotal + departureTotal + shiftingTotal;
+  final.style.display = 'block';
+  final.innerHTML = `
+    <div class="summary">
+      <div><strong>Arrival total</strong><br>€${arrivalTotal.toFixed(2)}</div>
+      <div><strong>Departure total</strong><br>€${departureTotal.toFixed(2)}</div>
+      <div><strong>Shifting total</strong><br>€${shiftingTotal.toFixed(2)}</div>
+      <div><strong>Grand total</strong><br>€${grandTotal.toFixed(2)}</div>
+    </div>
+  `;
+
+  const amountKey = getMooringAmountKey();
+
+  if (!hasValidGt) {
+    if (amountKey) safeStorageRemove(amountKey);
+  } else if (amountKey) {
+    safeStorageSet(amountKey, grandTotal.toFixed(2));
+  }
+
+  const stateKey = getMooringStateKey();
+  if (stateKey) {
+    safeStorageSet(stateKey, JSON.stringify({ gt: gtInput.value, cards: cardStates }));
+  } else {
+    saveMooringState();
+  }
+}
+
+function initMooring() {
+  const gtInput = document.getElementById('mooringGt');
+  const cardsWrap = document.getElementById('mooringCards');
+  if (!gtInput || !cardsWrap) return;
+
+  restoreMooringState();
+  calculateMooring();
+
+  gtInput.addEventListener('input', calculateMooring);
+
+  cardsWrap.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!target) return;
+    if (target.id && target.id.startsWith('mooringOp_')) {
+      updateMooringCardTitles();
+    }
+    calculateMooring();
+  });
+
+  cardsWrap.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!target) return;
+    if (target.id && target.id.startsWith('mooringOp_')) {
+      updateMooringCardTitles();
+    }
+    if (target.id && target.id.startsWith('mooringBoatEnabled_')) {
+      const id = target.id.replace('mooringBoatEnabled_', '');
+      const boatFields = document.getElementById(`mooringBoatFields_${id}`);
+      const boatHoursInput = document.getElementById(`mooringBoatHours_${id}`);
+      setMooringAddonState(Boolean(target.checked), boatFields, boatHoursInput);
+    }
+    if (target.id && target.id.startsWith('mooringManEnabled_')) {
+      const id = target.id.replace('mooringManEnabled_', '');
+      const manFields = document.getElementById(`mooringManFields_${id}`);
+      const manHoursInput = document.getElementById(`mooringManHours_${id}`);
+      const manPersonsInput = document.getElementById(`mooringManPersons_${id}`);
+      setMooringAddonState(Boolean(target.checked), manFields, manHoursInput, manPersonsInput);
+    }
+    calculateMooring();
+  });
+
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STORAGE_KEYS.gt) return;
+    const nextGt = safeStorageGet(STORAGE_KEYS.gt) || '';
+    if (gtInput.value !== nextGt) {
+      gtInput.value = nextGt;
+      calculateMooring();
+    }
+  });
+}
+
 // Tug calculator logic
 let tugCount = 0;
 const MIN_VOYAGE = 1;
@@ -1814,6 +3041,15 @@ function syncLinesMaster() {
 
 function updateTugTitles() {
   const cards = document.querySelectorAll('#tugCards .card');
+  const operations = Array.from(cards).map((card) => {
+    const id = card.id.split('_')[1];
+    return document.getElementById(`op_${id}`)?.value === 'departure' ? 'departure' : 'arrival';
+  });
+  const operationCounts = operations.reduce((acc, operation) => {
+    acc[operation] = (acc[operation] || 0) + 1;
+    return acc;
+  }, {});
+
   let arrivalIndex = 0;
   let departureIndex = 0;
 
@@ -1825,10 +3061,12 @@ function updateTugTitles() {
 
     if (op === 'arrival') {
       arrivalIndex++;
-      title.innerText = `${arrivalIndex}${getOrdinal(arrivalIndex)} Tugboat on arrival`;
+      const prefix = operationCounts.arrival > 1 ? `${arrivalIndex}${getOrdinal(arrivalIndex)} ` : '';
+      title.innerText = `${prefix}Tugboat on arrival`;
     } else {
       departureIndex++;
-      title.innerText = `${departureIndex}${getOrdinal(departureIndex)} Tugboat on departure`;
+      const prefix = operationCounts.departure > 1 ? `${departureIndex}${getOrdinal(departureIndex)} ` : '';
+      title.innerText = `${prefix}Tugboat on departure`;
     }
   });
 }
@@ -2031,5 +3269,7 @@ window.addEventListener('beforeprint', () => {
 window.addEventListener('DOMContentLoaded', () => {
   initIndex();
   initLightDues();
+  initPortDues();
+  initMooring();
   initTugs();
 });
