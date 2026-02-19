@@ -17,11 +17,16 @@
 
     <div class="card">
       <div class="section-title">Mooring Sailing PDA</div>
-      <div class="row light-dues-controls">
+      <div class="row">
         <div>
           <label>Gross Tonnage (GT)</label>
           <input id="mooringGt" type="number" min="0" step="1" placeholder="Enter GT" />
           <div class="note">GT is synced with index Gross Tonnage</div>
+        </div>
+        <div>
+          <label>Base Tariff (EUR / hour)</label>
+          <input id="mooringTariff" type="number" readonly />
+          <div class="note">Tariff is auto-selected from GT</div>
         </div>
       </div>
     </div>
