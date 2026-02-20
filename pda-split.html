@@ -6,8 +6,14 @@
   <title>PRO-FORMA D/A</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
-<body class="page-index">
-  <button type="button" id="openPdaDatabaseTopBtn" class="top-home-btn">Home</button>
+<body class="page-index page-split">
+  <div class="top-toolbar">
+    <button type="button" id="openPdaDatabaseTopBtn" class="top-home-btn">Home</button>
+    <div class="density-toggle" role="group" aria-label="Density">
+      <button id="densityComfortable" type="button" class="active">Comfortable</button>
+      <button id="densityDense" type="button">Dense</button>
+    </div>
+  </div>
   <div class="container">
     <div class="logo-bar">
       <textarea id="logoLeftNote" class="cell-input logo-left-note" rows="2" placeholder=""></textarea>
@@ -28,10 +34,6 @@
         </div>
       </div>
       <div class="hero-right">
-        <div class="density-toggle" role="group" aria-label="Density">
-          <button id="densityComfortable" type="button" class="active">Comfortable</button>
-          <button id="densityDense" type="button">Dense</button>
-        </div>
         <div class="date">Split, <input id="dateInput" class="cell-input date-input" value="" /></div>
       </div>
     </div>

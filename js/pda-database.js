@@ -195,9 +195,14 @@
       const editButton = document.createElement('button');
       editButton.type = 'button';
       editButton.className = 'mini pda-db-edit-btn';
-      editButton.textContent = 'Edit';
+      editButton.setAttribute('aria-label', 'Edit PDA');
+      editButton.title = 'Edit';
       editButton.dataset.action = 'edit';
       editButton.dataset.id = position.id;
+      const editIcon = document.createElement('img');
+      editIcon.src = 'icons/edit_48x48.png';
+      editIcon.alt = '';
+      editButton.appendChild(editIcon);
       actionCell.appendChild(editButton);
       row.appendChild(actionCell);
 
@@ -233,9 +238,14 @@
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
       deleteButton.className = 'mini pda-db-delete-btn';
-      deleteButton.textContent = 'Delete';
+      deleteButton.setAttribute('aria-label', 'Delete PDA');
+      deleteButton.title = 'Delete';
       deleteButton.dataset.action = 'delete';
       deleteButton.dataset.id = position.id;
+      const deleteIcon = document.createElement('img');
+      deleteIcon.src = 'icons/remove_48×48.png';
+      deleteIcon.alt = '';
+      deleteButton.appendChild(deleteIcon);
       deleteCell.appendChild(deleteButton);
       row.appendChild(deleteCell);
 
