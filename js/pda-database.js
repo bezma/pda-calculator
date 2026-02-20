@@ -125,8 +125,9 @@
     return {
       date: readField('dateInput'),
       vesselName: readField('vesselNameIndex'),
-      port: readField('portInput'),
+      berthTerminal: readField('berthTerminal'),
       operation: readField('operationsInput'),
+      cargo: readField('cargoInput'),
       agent: readField('agentInput')
     };
   }
@@ -159,8 +160,9 @@
       id: existingId || makeId(),
       date: metadata.date,
       vesselName: metadata.vesselName,
-      port: metadata.port,
+      berthTerminal: metadata.berthTerminal,
       operation: metadata.operation,
+      cargo: metadata.cargo,
       agent: metadata.agent,
       savedAt: new Date().toISOString(),
       indexState: snapshotIndexState()
@@ -177,7 +179,7 @@
     if (positions.length === 0) {
       const emptyRow = document.createElement('tr');
       const emptyCell = document.createElement('td');
-      emptyCell.colSpan = 7;
+      emptyCell.colSpan = 8;
       emptyCell.className = 'pda-db-empty';
       emptyCell.textContent = 'No PDA positions saved yet.';
       emptyRow.appendChild(emptyCell);
@@ -222,13 +224,17 @@
       vesselCell.appendChild(savedAt);
       row.appendChild(vesselCell);
 
-      const portCell = document.createElement('td');
-      portCell.textContent = position.port || '-';
-      row.appendChild(portCell);
+      const berthTerminalCell = document.createElement('td');
+      berthTerminalCell.textContent = position.berthTerminal || position.port || '-';
+      row.appendChild(berthTerminalCell);
 
       const operationCell = document.createElement('td');
       operationCell.textContent = position.operation || '-';
       row.appendChild(operationCell);
+
+      const cargoCell = document.createElement('td');
+      cargoCell.textContent = position.cargo || '-';
+      row.appendChild(cargoCell);
 
       const agentCell = document.createElement('td');
       agentCell.textContent = position.agent || '-';
@@ -304,8 +310,9 @@
 
     writeField('dateInput', record.date || '');
     writeField('vesselNameIndex', record.vesselName || '');
-    writeField('portInput', record.port || '');
+    writeField('berthTerminal', record.berthTerminal || record.port || '');
     writeField('operationsInput', record.operation || '');
+    writeField('cargoInput', record.cargo || '');
     writeField('agentInput', record.agent || '');
 
     syncSharedValuesFromForm();

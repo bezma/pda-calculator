@@ -1362,9 +1362,21 @@ function isPdaMoneyInput(input) {
   return Boolean(cell && cell.cellIndex === 1);
 }
 
+function getMoneyInputSourceValue(input, preferredRaw) {
+  if (!input) return '';
+  const raw = preferredRaw === undefined || preferredRaw === null ? '' : String(preferredRaw).trim();
+  if (raw) return raw;
+  const current = String(input.value || '').trim();
+  if (current) return current;
+  return String(input.placeholder || '').trim();
+}
+
 function getRawOrCurrentPdaValue(input) {
   if (!input) return 0;
-  const source = input.dataset.rawValue !== undefined ? input.dataset.rawValue : input.value;
+  const source = getMoneyInputSourceValue(
+    input,
+    input.dataset.rawValue !== undefined ? input.dataset.rawValue : input.value
+  );
   return parseMoneyValue(source);
 }
 
@@ -1554,9 +1566,11 @@ function recalcOutlayTotals() {
     } else if (pdaInput && pdaInput.dataset.rawValue !== undefined && !pdaInput.readOnly) {
       pdaInput.value = pdaInput.dataset.rawValue;
       delete pdaInput.dataset.rawValue;
-      pdaValue = parseMoneyValue(pdaInput.value);
+      pdaValue = parseMoneyValue(getMoneyInputSourceValue(pdaInput, pdaInput.value));
     }
-    const sailingValue = inputs.length >= 2 ? parseMoneyValue(inputs[1].value) : 0;
+    const sailingValue = inputs.length >= 2
+      ? parseMoneyValue(getMoneyInputSourceValue(inputs[1], inputs[1].value))
+      : 0;
     runningPda += pdaValue;
     runningSailing += sailingValue;
     totalPda += pdaValue;
@@ -1681,8 +1695,10 @@ function exportToExcel() {
       const rate = document.getElementById('bankRate')?.value || '';
       if (rate) descValue = `${descValue} (${rate}%)`;
     }
-    const pdaValue = row.querySelector('td:nth-child(2) input')?.value || '';
-    const sailingValue = row.querySelector('td:nth-child(3) input')?.value || '';
+    const pdaInput = row.querySelector('td:nth-child(2) input');
+    const sailingInput = row.querySelector('td:nth-child(3) input');
+    const pdaValue = pdaInput ? getMoneyInputSourceValue(pdaInput, pdaInput.value) : '';
+    const sailingValue = sailingInput ? getMoneyInputSourceValue(sailingInput, sailingInput.value) : '';
     outlayRows.push([descValue, pdaValue, sailingValue]);
   });
 
@@ -3906,7 +3922,6 @@ function syncImoMaster() {
     if (cb.checked) checked++;
   }
   if (total === 0) {
-    imoMaster.checked = false;
     imoMaster.indeterminate = false;
     return;
   }
